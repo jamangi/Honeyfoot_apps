@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { cancelDeckSearch, cancelInfluencePlacement, conditionPlayStatus, createMatchState, eligibleTargets as findEligibleTargets, finishRound, isInfluenceCard, playCard as resolveCardPlay, resolveDeckSearch, resolveInfluencePlacement } from './game/engine.js'
 import { selectCallusCard, TEST_DIFFICULTIES } from './game/callus-ai.js'
 import { playArchangelTurn } from './game/archangel-ai.js'
+import { applyFactionExperience, matchRewards, MAX_FACTION_LEVEL, xpRequiredForNextLevel } from './game/economy.js'
 import { usePlayerProfile } from './player-profile/PlayerProfileContext.jsx'
 
 const assetUrl = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
@@ -712,19 +713,22 @@ function CardPile({ label, count, faction, discard }) {
 }
 
 function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
-  return createMatchState({
-    playerDeck,
-    opponentDeck,
-    maxComfort: GAME_RULES.maxComfort,
-    startingComfortRatio: GAME_RULES.startingComfortRatio,
-    playerCardOrder: tutorialFaction ? tutorialDeckOrders[playerDeck.faction] : null,
-    opponentCardOrder: tutorialFaction ? tutorialDeckOrders[opponentDeck.faction] : null,
-  })
+  return {
+    ...createMatchState({
+      playerDeck,
+      opponentDeck,
+      maxComfort: GAME_RULES.maxComfort,
+      startingComfortRatio: GAME_RULES.startingComfortRatio,
+      playerCardOrder: tutorialFaction ? tutorialDeckOrders[playerDeck.faction] : null,
+      opponentCardOrder: tutorialFaction ? tutorialDeckOrders[opponentDeck.faction] : null,
+    }),
+    rewardGranted: false,
+  }
 }
 
-function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorialFaction = null }) {
+function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null }) {
   const isTutorial = Boolean(tutorialFaction)
-  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v1` : 'honeyfoot-match'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}`
+  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v1` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
   const [match, setMatch] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(matchStorageKey))
@@ -746,6 +750,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorial
   const [replacementSlot, setReplacementSlot] = useState(null)
   const [skipReplacementConfirm, setSkipReplacementConfirm] = useState(false)
   const [expandedLogEntries, setExpandedLogEntries] = useState({})
+  const [matchReward, setMatchReward] = useState(null)
   const selectedCard = cardById(selectedId)
   const tutorialPromptCardIds = tutorialGuide === 'archangel-round1-care-kit' ? ['care-kit']
         : tutorialGuide === 'callus-round1-dampness' ? ['chronic-dampness', 'webbing-itch']
@@ -763,6 +768,13 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorial
   useEffect(() => {
     localStorage.setItem(matchStorageKey, JSON.stringify({ playerDeckId: playerDeck.id, opponentDeckId: opponentDeck.id, match }))
   }, [match, matchStorageKey, playerDeck.id, opponentDeck.id])
+
+  useEffect(() => {
+    if (!match.result || match.rewardGranted || isTutorial || !onMatchComplete) return
+    const reward = onMatchComplete(match.result, opponentLevel)
+    setMatchReward(reward)
+    setMatch((current) => ({ ...current, rewardGranted: true }))
+  }, [isTutorial, match.result, match.rewardGranted, onMatchComplete, opponentLevel])
 
   const handCounts = match.playerHand.reduce((groups, id) => ({ ...groups, [id]: (groups[id] || 0) + 1 }), {})
   const groupedHand = (match.playerHandOrder || [...new Set(match.playerHand)]).filter((id) => handCounts[id]).map((id) => [id, handCounts[id]])
@@ -961,7 +973,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorial
       {replacementSlot !== null && pendingInfluence && <div className="influence-replace-backdrop"><section className="influence-replace-dialog"><small>Influence slot {replacementSlot + 1}</small><h3>Replace this Influence?</h3><p><strong>{cardById(pendingInfluence.cardId).name}</strong> will enter this slot. <strong>{cardById(match.playerBoard[replacementSlot]).name}</strong> will be discarded.</p><label><input type="checkbox" checked={skipReplacementConfirm} onChange={(event) => setSkipReplacementConfirm(event.target.checked)} /> Don’t ask again this match</label><div><button onClick={() => setReplacementSlot(null)}>Keep current</button><button className="primary" onClick={confirmReplacement}>Replace influence</button></div></section></div>}
       {viewedCard && <div className={`board-decision-backdrop ${pendingSearch ? 'search-card-inspector' : ''}`} onClick={() => setViewedCard(null)}><div className="board-card-view" onClick={(event) => event.stopPropagation()}><button className="card-view-close" onClick={() => setViewedCard(null)} aria-label="Close card details">×</button><GameCard card={viewedCard} onInspect={() => {}} showTraits={false} /><div><small>{viewedCard.type}{viewedCard.subtype ? ` · ${viewedCard.subtype}` : ''}</small><h3>{viewedCard.name}</h3><p>{viewedCard.text}</p>{viewedCard.severity && <strong>Current Severity: {viewedCard.severity}</strong>}{viewedCard.copies > 1 && <strong>Copies in stack: {viewedCard.copies} · Discomfort: {viewedCard.currentDiscomfort}</strong>}{viewedCard.traits?.length > 0 && <span>Traits: {viewedCard.traits.join(', ')}</span>}</div></div></div>}
       {logOpen && <aside className="battle-log-panel"><header><div><small>Match record</small><h3>History</h3></div><button onClick={() => setLogOpen(false)} aria-label="Close history">×</button></header><div className="battle-log-scroll">{[...new Set(match.log.map((entry) => entry.round))].reverse().map((round) => <section key={round}><h4>Round {round}</h4>{match.log.filter((entry) => entry.round === round).map((entry, index) => { const card = entry.cardId ? cardById(entry.cardId) : null; const visibleDetails = (entry.details || []).filter((detail) => detail.visibility === 'public' || detail.visibility === 'player'); const entryKey = `${round}-${index}-${entry.phase}`; const expanded = expandedLogEntries[entryKey]; return <div className={`battle-event-wrap actor-${entry.actor}`} key={entryKey}><button className={`battle-event ${visibleDetails.length ? 'has-details' : ''}`} onClick={() => visibleDetails.length && setExpandedLogEntries((current) => ({ ...current, [entryKey]: !current[entryKey] }))}>{card ? <span className={`event-card specialty-${card.specialty.toLowerCase()}`}>{card.mark}</span> : <span className="event-dot">•</span>}<div><small>{entry.phase}</small><p>{entry.text}</p></div>{visibleDetails.length > 0 && <b aria-label={expanded ? 'Hide card details' : 'Show card details'}>{expanded ? '⌃' : '⌄'}</b>}</button>{expanded && <div className="battle-event-details">{visibleDetails.map((detail, detailIndex) => { const detailCard = detail.cardId ? cardById(detail.cardId) : null; return <button key={`${detail.cardId}-${detailIndex}`} onClick={() => detailCard && setViewedCard(detailCard)}>{detailCard ? <span className={`event-card specialty-${detailCard.specialty.toLowerCase()}`}>{detailCard.mark}</span> : <span className="event-dot">•</span>}<span><small>{detail.visibility === 'public' ? 'Revealed' : 'Private to you'}</small><strong>{detail.text}</strong></span></button> })}</div>}</div> })}</section>)}</div></aside>}
-      {match.result && <div className="board-result"><div><small>{isTutorial ? 'Lesson match complete' : 'Test match complete'}</small><h2>{winnerName} prevail</h2><p>{match.result === playerDeck.faction ? 'Your deck carried the foot to its goal.' : 'The opposing deck reached its goal first.'}</p><button onClick={() => setLogOpen(true)}>Review history</button><button onClick={() => { setMatch(createMatch(playerDeck, opponentDeck, tutorialFaction)); setTutorialIntroOpen(isTutorial); setTutorialGuide(tutorialFaction === 'archangels' ? 'archangel-round1-comfort' : tutorialFaction === 'callus' ? 'callus-round1-dampness' : 'off'); setTutorialCareActionsRemaining(3); setTargetingId(null); setSkipReplacementConfirm(false); setReplacementSlot(null) }}>Rematch</button><button onClick={onExit}>Return to {isTutorial ? 'lesson selection' : 'decks'}</button></div></div>}
+      {match.result && <div className="board-result"><div><small>{isTutorial ? 'Lesson match complete' : 'Test match complete'}</small><h2>{winnerName} prevail</h2><p>{match.result === playerDeck.faction ? 'Your deck carried the foot to its goal.' : 'The opposing deck reached its goal first.'}</p>{matchReward && <div className="match-rewards"><span><strong>+{matchReward.gold}</strong> Petals</span><span><strong>+{matchReward.xp}</strong> XP</span>{matchReward.levelsGained > 0 && <b>Level {matchReward.newLevel} reached</b>}</div>}<button onClick={() => setLogOpen(true)}>Review history</button><button onClick={() => { setMatchReward(null); setMatch(createMatch(playerDeck, opponentDeck, tutorialFaction)); setTutorialIntroOpen(isTutorial); setTutorialGuide(tutorialFaction === 'archangels' ? 'archangel-round1-comfort' : tutorialFaction === 'callus' ? 'callus-round1-dampness' : 'off'); setTutorialCareActionsRemaining(3); setTargetingId(null); setSkipReplacementConfirm(false); setReplacementSlot(null) }}>Rematch</button><button onClick={onExit}>Return to {isTutorial ? 'lesson selection' : 'decks'}</button></div></div>}
     </div>
   )
 }
@@ -1147,6 +1159,9 @@ function HoneyfootCards() {
   const activeFaction = mode === 'callus' ? 'callus' : 'archangels'
   const activeDeck = decks.find((deck) => deck.id === activeDeckId[activeFaction])
   const activeAvatar = profileAvatars.find((avatar) => avatar.id === playerProfile.identity.avatarId)
+  const factionProgress = playerProfile.progression[activeFaction]
+  const selectedOpponentLevel = factionProgress.selectedLevel
+  const nextLevelXp = xpRequiredForNextLevel(factionProgress.level)
   const testDeck = (deck) => {
     setTutorialFaction(null)
     setMode(deck.faction)
@@ -1177,10 +1192,17 @@ function HoneyfootCards() {
     setTestNotice('')
   }
   const boardDeck = decks.find((deck) => deck.id === boardDeckId)
+  const boardProgress = boardDeck ? playerProfile.progression[boardDeck.faction] : null
   const tutorialOpponentId = tutorialFaction === 'archangels' ? 'pressure-friction' : tutorialFaction === 'callus' ? 'everyday-comfort' : null
   const opponentDeck = tutorialOpponentId
     ? decks.find((deck) => deck.id === tutorialOpponentId) || starterDecks.find((deck) => deck.id === tutorialOpponentId)
     : decks.find((deck) => deck.faction !== boardDeck?.faction && deckIsValid(deck)) || starterDecks.find((deck) => deck.faction !== boardDeck?.faction)
+  const grantMatchRewards = (winner, opponentLevel) => {
+    const reward = matchRewards({ won: winner === boardDeck.faction, difficulty: testDifficulty, opponentLevel, playerLevel: boardProgress.level })
+    const nextProgress = applyFactionExperience(boardProgress, reward.xp)
+    playerProfileDispatch({ type: 'match/complete', faction: boardDeck.faction, xp: reward.xp, gold: reward.gold })
+    return { ...reward, levelsGained: nextProgress.level - boardProgress.level, newLevel: nextProgress.level }
+  }
 
   return (
     <section className={`cards-home theme-${theme}`}>
@@ -1209,7 +1231,7 @@ function HoneyfootCards() {
       </header>
 
       {section === 'Board' && boardDeck && opponentDeck ? (
-        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} tutorialFaction={tutorialFaction} onExit={() => {
+        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} opponentLevel={boardProgress?.selectedLevel || 1} onMatchComplete={grantMatchRewards} tutorialFaction={tutorialFaction} onExit={() => {
           if (tutorialFaction) { setMode('learn'); setLessonFaction(tutorialFaction); setLessonSelecting(true); setTutorialFaction(null); setSection('Home') }
           else setSection('Decks')
         }} />
@@ -1260,14 +1282,14 @@ function HoneyfootCards() {
             <div className="cards-play-center">
               <div className={`level-hex faction-${mode}`}>
                 <span>{mode === 'callus' ? 'The Callus' : mode === 'learn' ? 'Care studies' : 'Archangel'}</span>
-                <strong>{playerProfile.progression[activeFaction].level}</strong>
-                <small>Level</small>
+                <strong>{factionProgress.level}</strong>
+                <small>{factionProgress.level >= MAX_FACTION_LEVEL ? 'Maximum level' : `${factionProgress.xp} / ${nextLevelXp} XP`}</small>
               </div>
               <div className="active-deck">
                 <span>Selected deck</span>
                 <strong>{mode === 'learn' ? 'Guided practice' : activeDeck?.name || 'Choose a deck'}</strong>
               </div>
-              {mode !== 'learn' && <label className="home-opponent-select"><span>Computer opponent</span><select value={testDifficulty} onChange={(event) => setTestDifficulty(event.target.value)}>{Object.entries(TEST_DIFFICULTIES).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>}
+              {mode !== 'learn' && <div className="home-match-options"><label className="home-opponent-select"><span>Computer opponent</span><select value={testDifficulty} onChange={(event) => setTestDifficulty(event.target.value)}>{Object.entries(TEST_DIFFICULTIES).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label><label className="home-opponent-select"><span>Challenge level</span><select value={selectedOpponentLevel} onChange={(event) => playerProfileDispatch({ type: 'progression/select-level', faction: activeFaction, level: Number(event.target.value) })}>{Array.from({ length: factionProgress.level }, (_, index) => index + 1).map((level) => <option key={level} value={level}>Level {level}</option>)}</select></label></div>}
               <button className="cards-play-button" onClick={beginHomeMatch}>{mode === 'learn' ? 'Begin lesson' : 'Play'}</button>
               {testNotice && <p className="test-notice">{testNotice}</p>}
             </div>

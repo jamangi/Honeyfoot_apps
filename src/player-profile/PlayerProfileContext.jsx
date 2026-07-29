@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
+import { applyFactionExperience } from '../game/economy.js'
 
 export const PLAYER_PROFILE_STORAGE_KEY = 'honeyfoot-player-profile'
-export const PLAYER_PROFILE_VERSION = 4
+export const PLAYER_PROFILE_VERSION = 5
 
 const defaultFootProfile = {
   version: 1,
@@ -35,8 +36,8 @@ export const initialPlayerProfile = {
     petals: 0,
   },
   progression: {
-    archangels: { level: 1 },
-    callus: { level: 1 },
+    archangels: { level: 1, selectedLevel: 1, xp: 0 },
+    callus: { level: 1, selectedLevel: 1, xp: 0 },
     story: { chapterId: null, sceneId: null },
   },
   footProfile: defaultFootProfile,
@@ -135,6 +136,24 @@ export function playerProfileReducer(profile, action) {
           },
         },
       }
+    case 'progression/select-level': {
+      if (!['archangels', 'callus'].includes(action.faction)) return profile
+      const factionProgress = profile.progression[action.faction]
+      const selectedLevel = Math.max(1, Math.min(factionProgress.level, Number(action.level) || 1))
+      return {
+        ...profile,
+        progression: { ...profile.progression, [action.faction]: { ...factionProgress, selectedLevel } },
+      }
+    }
+    case 'match/complete': {
+      if (!['archangels', 'callus'].includes(action.faction)) return profile
+      const factionProgress = applyFactionExperience(profile.progression[action.faction], Math.max(0, Number(action.xp) || 0))
+      return {
+        ...profile,
+        wallet: { ...profile.wallet, petals: profile.wallet.petals + Math.max(0, Number(action.gold) || 0) },
+        progression: { ...profile.progression, [action.faction]: factionProgress },
+      }
+    }
     case 'story/set-position':
       return {
         ...profile,

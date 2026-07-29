@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { cancelDeckSearch, cancelInfluencePlacement, createMatchState, finishRound, playCard, resolveDeckSearch, resolveInfluencePlacement } from '../src/game/engine.js'
 import { playArchangelTurn } from '../src/game/archangel-ai.js'
+import { applyFactionExperience, matchRewards, xpRequiredForNextLevel } from '../src/game/economy.js'
 
 const cards = [
   { id: 'webbing-itch', name: 'Webbing Itch', faction: 'callus', type: 'Condition', subtype: 'Microbial', severity: 4, discomfort: 1, cost: 0 },
@@ -136,6 +137,23 @@ const base = () => createMatchState({ playerDeck: deck('Callus','callus','chroni
   const executive = playArchangelTurn(starting, getCard, 'executive', 'opponent')
   assert.equal(executive.conditions.length, 0, 'Executive Archangels should use matching care against a valid Condition')
   assert.equal(executive.comfort, 11, 'Executive matching care should restore the Severity it removes')
+}
+
+{
+  const totalEfficientWins = Array.from({ length: 29 }, (_, index) => xpRequiredForNextLevel(index + 1) / 100).reduce((total, wins) => total + wins, 0)
+  assert.equal(totalEfficientWins, 482, 'the level curve should require approximately four hours of efficient victories')
+  assert.deepEqual(matchRewards({ won: true, difficulty: 'executive', opponentLevel: 10, playerLevel: 10 }), { xp: 100, gold: 100, difficultyModifier: 1, levelModifier: 1 }, 'a same-level Executive victory should grant full rewards')
+  assert.equal(matchRewards({ won: true, difficulty: 'pressure', opponentLevel: 5, playerLevel: 10 }).xp, 40, 'difficulty and lower-level modifiers should combine')
+  assert.deepEqual(matchRewards({ won: false, difficulty: 'executive', opponentLevel: 10, playerLevel: 10 }).xp, 0, 'defeats should grant no XP')
+  assert.equal(matchRewards({ won: false, difficulty: 'executive', opponentLevel: 10, playerLevel: 10 }).gold, 25, 'defeats should grant one quarter of the available gold')
+}
+
+{
+  const advancedAtMaximum = applyFactionExperience({ level: 1, selectedLevel: 1, xp: 550 }, 100)
+  assert.deepEqual(advancedAtMaximum, { level: 2, selectedLevel: 2, xp: 50 }, 'leveling while playing at maximum should advance the selected level')
+  const stayedLower = applyFactionExperience({ level: 5, selectedLevel: 2, xp: xpRequiredForNextLevel(5) - 50 }, 100)
+  assert.equal(stayedLower.level, 6, 'earned XP should unlock the next level while a lower challenge is selected')
+  assert.equal(stayedLower.selectedLevel, 2, 'leveling from a lower selection should preserve that deliberate selection')
 }
 
 console.log('Game engine and computer-player regression checks passed.')
