@@ -3,6 +3,8 @@ import { cancelDeckSearch, cancelInfluencePlacement, conditionPlayStatus, create
 import { selectCallusCard, TEST_DIFFICULTIES } from './game/callus-ai.js'
 import { usePlayerProfile } from './player-profile/PlayerProfileContext.jsx'
 
+const assetUrl = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
+
 const navItems = ['Home', 'Services', 'Care Tools', 'About', 'News', 'Contact', 'Product', 'Blog']
 
 const appTabs = [
@@ -240,7 +242,7 @@ function HomePage() {
   return (
     <>
       <section className="legacy-hero">
-        <img src="/clinic-assets/plumeria-stones.png" alt="White plumeria flower resting on smooth stones" />
+        <img src={assetUrl('/clinic-assets/plumeria-stones.png')} alt="White plumeria flower resting on smooth stones" />
         <h1>2080 S. Frontage road<br />Vicksburg, MS 39180<br />Have feet issues...we travel</h1>
         <p>Foot and Surgery clinic, Inc&nbsp; podiatry service. Our central focus compass is<br />working diligently, striving to deliver quality podiatry care and compassion to<br />every resident as we offer podiatry service.</p>
         <a className="legacy-appointment" href="mailto:vershernejs@yahoo.com">Appointment email, text or call<br /><strong>601-918-0825</strong></a>
@@ -326,16 +328,16 @@ const hotspotLayouts = {
 
 const explorerAssets = {
   masculine: {
-    sole: '/foot-explorer/sculpted/masculine-sole-v1.png',
-    top: '/foot-explorer/sculpted/masculine-top-v1.png',
-    inside: '/foot-explorer/sculpted/masculine-inside-v1.png',
-    outside: '/foot-explorer/sculpted/masculine-outside-v1.png',
+    sole: assetUrl('/foot-explorer/sculpted/masculine-sole-v1.png'),
+    top: assetUrl('/foot-explorer/sculpted/masculine-top-v1.png'),
+    inside: assetUrl('/foot-explorer/sculpted/masculine-inside-v1.png'),
+    outside: assetUrl('/foot-explorer/sculpted/masculine-outside-v1.png'),
   },
   feminine: {
-    sole: '/foot-explorer/sculpted/feminine-sole-v1.png',
-    top: '/foot-explorer/sculpted/feminine-top-v1.png',
-    inside: '/foot-explorer/sculpted/feminine-inside-v2.png',
-    outside: '/foot-explorer/sculpted/feminine-outside-v1.png',
+    sole: assetUrl('/foot-explorer/sculpted/feminine-sole-v1.png'),
+    top: assetUrl('/foot-explorer/sculpted/feminine-top-v1.png'),
+    inside: assetUrl('/foot-explorer/sculpted/feminine-inside-v2.png'),
+    outside: assetUrl('/foot-explorer/sculpted/feminine-outside-v1.png'),
   },
 }
 
@@ -546,8 +548,8 @@ const profileAvatars = [
   { id: 'shoe', label: 'Shoe', kind: 'symbol' },
   { id: 'sock', label: 'Sock', kind: 'symbol' },
   { id: 'book', label: 'Book', kind: 'symbol' },
-  ...Array.from({ length: 4 }, (_, index) => ({ id: `man-${index + 1}`, label: `Portrait ${index + 1}`, kind: 'portrait', src: `/honeyfoot-cards/avatars/man-${index + 1}.webp` })),
-  ...Array.from({ length: 4 }, (_, index) => ({ id: `woman-${index + 1}`, label: `Portrait ${index + 5}`, kind: 'portrait', src: `/honeyfoot-cards/avatars/woman-${index + 1}.webp` })),
+  ...Array.from({ length: 4 }, (_, index) => ({ id: `man-${index + 1}`, label: `Portrait ${index + 1}`, kind: 'portrait', src: assetUrl(`/honeyfoot-cards/avatars/man-${index + 1}.webp`) })),
+  ...Array.from({ length: 4 }, (_, index) => ({ id: `woman-${index + 1}`, label: `Portrait ${index + 5}`, kind: 'portrait', src: assetUrl(`/honeyfoot-cards/avatars/woman-${index + 1}.webp`) })),
 ]
 
 function AvatarSymbol({ id }) {
@@ -902,7 +904,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorial
         })}</div>
         <div className="game-foot">
           <div className="comfort-orbit"><span>Comfort</span><strong>{match.comfort}</strong><small>/ {GAME_RULES.maxComfort}</small></div>
-          <img src="/foot-explorer/sculpted/feminine-top-v1.png" alt="The shared game foot" />
+          <img src={assetUrl('/foot-explorer/sculpted/feminine-top-v1.png')} alt="The shared game foot" />
           <div className="comfort-meter"><i style={{ width: `${(match.comfort / GAME_RULES.maxComfort) * 100}%` }} /></div>
           <p>{match.comfort <= 4 ? 'Comfort is strained.' : match.comfort >= 12 ? 'Comfort is flourishing.' : 'The balance is still in play.'}</p>
         </div>
@@ -1199,7 +1201,7 @@ function HoneyfootCards() {
           <div className="cards-character-panel">
             <div className="cards-ambient-shape shape-one" />
             <div className="cards-ambient-shape shape-two" />
-            <img src="/honeyfoot-cards/home-care-character-v1-edit.png" alt="A stylish woman enjoying a relaxed foot-care routine" />
+            <img src={assetUrl('/honeyfoot-cards/home-care-character-v1-edit.png')} alt="A stylish woman enjoying a relaxed foot-care routine" />
             <div className="cards-character-copy">
               <p>Season one</p>
               <h3>Every step<br />tells a story.</h3>
@@ -1311,7 +1313,7 @@ function CareToolsPage({ profile, dispatch }) {
 function LegacyPlaceholder({ page }) {
   return (
     <main className="legacy-placeholder">
-      <img src="/clinic-assets/stones-leaves.png" alt="Smooth stones and green leaves" />
+      <img src={assetUrl('/clinic-assets/stones-leaves.png')} alt="Smooth stones and green leaves" />
       <h1>{page}</h1>
       <p>This page is represented in the client mockup. Select Home or Care Tools to explore the working presentation.</p>
     </main>
