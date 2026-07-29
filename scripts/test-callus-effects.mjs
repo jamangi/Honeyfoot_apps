@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { cancelDeckSearch, cancelInfluencePlacement, createMatchState, finishRound, playCard, resolveDeckSearch, resolveInfluencePlacement } from '../src/game/engine.js'
+import { playArchangelTurn } from '../src/game/archangel-ai.js'
 
 const cards = [
   { id: 'webbing-itch', name: 'Webbing Itch', faction: 'callus', type: 'Condition', subtype: 'Microbial', severity: 4, discomfort: 1, cost: 0 },
@@ -120,4 +121,21 @@ const base = () => createMatchState({ playerDeck: deck('Callus','callus','chroni
   assert.equal(state.metrics.cardsPlayed.player, 0, 'cancelling placement should undo the provisional play count')
 }
 
-console.log('Callus influence regression checks passed.')
+{
+  const starting = { ...base(), comfort: 8, opponentHand: ['basic-massage'], opponentDiscard: [], opponentSupplies: 3, conditions: [] }
+  const executive = playArchangelTurn(starting, getCard, 'executive', 'opponent')
+  assert.deepEqual(executive.opponentHand, ['basic-massage'], 'Executive Archangels should preserve generic care when neither winning nor facing defeat')
+
+  const pressure = playArchangelTurn(starting, getCard, 'pressure', 'opponent')
+  assert.equal(pressure.comfort, 9, 'Pressure Archangels should spend generic care once Comfort reaches the midpoint')
+  assert.equal(pressure.opponentHand.length, 0, 'Pressure Archangels should use the generic care card they selected')
+}
+
+{
+  const starting = { ...base(), comfort: 8, opponentHand: ['basic-massage'], opponentDiscard: [], opponentSupplies: 3, conditions: [{ key: 'cramp-ai', cardId: 'toe-cramp', layers: [3], copies: 1, severity: 3, owner: 'player' }] }
+  const executive = playArchangelTurn(starting, getCard, 'executive', 'opponent')
+  assert.equal(executive.conditions.length, 0, 'Executive Archangels should use matching care against a valid Condition')
+  assert.equal(executive.comfort, 11, 'Executive matching care should restore the Severity it removes')
+}
+
+console.log('Game engine and computer-player regression checks passed.')

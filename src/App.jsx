@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cancelDeckSearch, cancelInfluencePlacement, conditionPlayStatus, createMatchState, eligibleTargets as findEligibleTargets, finishRound, isInfluenceCard, playCard as resolveCardPlay, resolveDeckSearch, resolveInfluencePlacement } from './game/engine.js'
 import { selectCallusCard, TEST_DIFFICULTIES } from './game/callus-ai.js'
+import { playArchangelTurn } from './game/archangel-ai.js'
 import { usePlayerProfile } from './player-profile/PlayerProfileContext.jsx'
 
 const assetUrl = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
@@ -723,7 +724,7 @@ function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
 
 function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorialFaction = null }) {
   const isTutorial = Boolean(tutorialFaction)
-  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v1` : 'honeyfoot-match'}-${playerDeck.id}-${opponentDeck.id}`
+  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v1` : 'honeyfoot-match'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}`
   const [match, setMatch] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(matchStorageKey))
@@ -830,8 +831,12 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, onExit, tutorial
     setMatch((current) => {
       if (current.result) return current
       let next = { ...current }
-      const preferred = selectCallusCard(next, cardById, difficulty)
-      if (preferred) next = applyCard(next, preferred, 'opponent')
+      if (opponentDeck.faction === 'archangels') {
+        next = playArchangelTurn(next, cardById, difficulty, 'opponent')
+      } else {
+        const preferred = selectCallusCard(next, cardById, difficulty)
+        if (preferred) next = applyCard(next, preferred, 'opponent')
+      }
       if (next.result) return next
       return finishRound(next, { playerFaction: playerDeck.faction, opponentFaction: opponentDeck.faction, getCard: cardById })
     })
@@ -1141,6 +1146,7 @@ function HoneyfootCards() {
 
   const activeFaction = mode === 'callus' ? 'callus' : 'archangels'
   const activeDeck = decks.find((deck) => deck.id === activeDeckId[activeFaction])
+  const activeAvatar = profileAvatars.find((avatar) => avatar.id === playerProfile.identity.avatarId)
   const testDeck = (deck) => {
     setTutorialFaction(null)
     setMode(deck.faction)
@@ -1158,6 +1164,17 @@ function HoneyfootCards() {
     setTestDifficulty('training')
     setBoardDeckId(lessonDeckId)
     setSection('Board')
+  }
+  const beginHomeMatch = () => {
+    if (mode === 'learn') return setLessonSelecting(true)
+    if (!activeDeck || !deckIsValid(activeDeck)) {
+      setTestNotice('Choose a complete 24-card deck before playing.')
+      return
+    }
+    setTutorialFaction(null)
+    setBoardDeckId(activeDeck.id)
+    setSection('Board')
+    setTestNotice('')
   }
   const boardDeck = decks.find((deck) => deck.id === boardDeckId)
   const tutorialOpponentId = tutorialFaction === 'archangels' ? 'pressure-friction' : tutorialFaction === 'callus' ? 'everyday-comfort' : null
@@ -1250,13 +1267,14 @@ function HoneyfootCards() {
                 <span>Selected deck</span>
                 <strong>{mode === 'learn' ? 'Guided practice' : activeDeck?.name || 'Choose a deck'}</strong>
               </div>
-              <button className="cards-play-button" onClick={() => mode === 'learn' && setLessonSelecting(true)}>{mode === 'learn' ? 'Begin lesson' : 'Play'}</button>
+              {mode !== 'learn' && <label className="home-opponent-select"><span>Computer opponent</span><select value={testDifficulty} onChange={(event) => setTestDifficulty(event.target.value)}>{Object.entries(TEST_DIFFICULTIES).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>}
+              <button className="cards-play-button" onClick={beginHomeMatch}>{mode === 'learn' ? 'Begin lesson' : 'Play'}</button>
               {testNotice && <p className="test-notice">{testNotice}</p>}
             </div>
 
             <div className="cards-shortcuts">
               <button onClick={() => setSection('Decks')}><span>▱</span><strong>Decks</strong><small>Build your strategy</small></button>
-              <button onClick={() => setSection('Profile')}><span className="empty-profile">+</span><strong>Profile</strong><small>Create your token</small></button>
+              <button onClick={() => setSection('Profile')}>{activeAvatar ? <ProfileAvatar avatar={activeAvatar} footProfile={playerProfile.footProfile} compact /> : <span className="empty-profile">+</span>}<strong>Profile</strong>{!activeAvatar && <small>Choose an icon</small>}</button>
               <button onClick={() => setSection('Shop')}><span>✦</span><strong>Shop</strong><small>Discover new cards</small></button>
             </div>
             </>}

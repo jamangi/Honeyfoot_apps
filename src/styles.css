@@ -182,6 +182,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid #777; outline-offset:
 .active-deck { margin-top: 12px; text-align: center; }
 .active-deck span { display: block; color: #969b96; font-size: 8px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
 .active-deck strong { display: block; margin-top: 3px; font: 500 17px var(--card-display); }
+.home-opponent-select { margin: 10px auto 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #858d88; font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.home-opponent-select select { padding: 6px 24px 6px 9px; border: 1px solid rgba(45,56,50,.14); border-radius: 99px; background: #fffdf8; color: var(--card-dark); font: 700 9px var(--card-sans); }
 .cards-play-button { min-width: 240px; margin-top: 16px; padding: 13px 28px; border: 0; border-radius: 99px; background: var(--card-accent); color: white; box-shadow: 0 10px 24px color-mix(in srgb, var(--card-accent) 28%, transparent); font-weight: 700; letter-spacing: .13em; text-transform: uppercase; cursor: pointer; }
 .cards-shortcuts { padding: 0 26px 26px; display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
 .cards-shortcuts button { min-width: 0; padding: 15px 10px 13px; display: grid; place-items: center; border: 1px solid rgba(45,56,50,.1); border-radius: 15px; background: #fffdf8; color: #344039; cursor: pointer; transition: transform .18s, box-shadow .18s; }
@@ -189,6 +191,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #777; outline-offset:
 .cards-shortcuts button > span { width: 35px; height: 35px; display: grid; place-items: center; margin-bottom: 5px; border-radius: 11px; background: color-mix(in srgb, var(--card-accent) 13%, white); color: var(--card-accent); font-size: 18px; }
 .cards-shortcuts strong { font-size: 11px; }.cards-shortcuts small { margin-top: 2px; overflow: hidden; color: #999d99; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
 .cards-shortcuts .empty-profile { border: 1px dashed color-mix(in srgb, var(--card-accent) 50%, transparent); border-radius: 50%; background: transparent; }
+.cards-shortcuts .profile-avatar.compact { width: 35px; height: 35px; margin-bottom: 5px; border-width: 2px; box-shadow: 0 5px 12px rgba(39,48,42,.12); }
 .profile-screen { min-height: 644px; display: grid; grid-template-columns: minmax(290px, .72fr) minmax(540px, 1.28fr); background: var(--card-panel); color: #303a35; }
 .profile-summary-card { min-width: 0; padding: 47px 38px 38px; display: flex; flex-direction: column; align-items: center; background: linear-gradient(150deg, var(--card-dark), color-mix(in srgb, var(--card-dark) 76%, var(--card-accent))); color: #fff; text-align: center; }
 .profile-summary-card .modern-eyebrow { align-self: flex-start; color: var(--card-accent-2); }
