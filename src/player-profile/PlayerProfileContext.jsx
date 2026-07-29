@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
 
 export const PLAYER_PROFILE_STORAGE_KEY = 'honeyfoot-player-profile'
-export const PLAYER_PROFILE_VERSION = 3
+export const PLAYER_PROFILE_VERSION = 4
 
 const defaultFootProfile = {
   version: 1,
@@ -32,10 +32,10 @@ export const initialPlayerProfile = {
     avatarId: 'lily',
   },
   wallet: {
-    petals: 1240,
+    petals: 0,
   },
   progression: {
-    archangels: { level: 12 },
+    archangels: { level: 1 },
     callus: { level: 1 },
     story: { chapterId: null, sceneId: null },
   },
@@ -92,6 +92,15 @@ function loadPlayerProfile() {
     } else if (stored?.version === 1 && stored.wallet?.petals === 0 && legacyWallet === null) {
       // Version 1 briefly treated a missing legacy value as zero during development.
       profile.wallet.petals = initialPlayerProfile.wallet.petals
+    }
+
+    // Version 4 begins the playable economy at a true level-one baseline.
+    // Earlier versions used showcase values before rewards existed, so those
+    // prototype balances should not carry into the progression system.
+    if (stored?.version < 4) {
+      profile.wallet.petals = 0
+      profile.progression.archangels.level = 1
+      profile.progression.callus.level = 1
     }
 
     return profile

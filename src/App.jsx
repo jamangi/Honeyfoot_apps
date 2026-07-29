@@ -1260,7 +1260,7 @@ function HoneyfootCards() {
             <div className="cards-play-center">
               <div className={`level-hex faction-${mode}`}>
                 <span>{mode === 'callus' ? 'The Callus' : mode === 'learn' ? 'Care studies' : 'Archangel'}</span>
-                <strong>12</strong>
+                <strong>{playerProfile.progression[activeFaction].level}</strong>
                 <small>Level</small>
               </div>
               <div className="active-deck">
