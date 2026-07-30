@@ -19,6 +19,12 @@ export const expandDeck = (deck) => Object.entries(deck.cards).flatMap(([id, cou
 export const removeFromHand = (hand, id) => { const index = hand.indexOf(id); return index < 0 ? hand : [...hand.slice(0, index), ...hand.slice(index + 1)] }
 const INFLUENCE_TYPES = ['Equipment', 'Environment', 'Shoe Attribute', 'Habit', 'Hazard']
 export const isInfluenceCard = (card) => INFLUENCE_TYPES.includes(card?.type)
+export const cardSupplyCost = (state, card, side) => {
+  const baseCost = Math.max(0, Number(card?.cost) || 0)
+  if (card?.faction !== 'archangels' || !card.traits?.includes('Kinetic')) return baseCost
+  const opposingBoard = state[`${side === 'player' ? 'opponent' : 'player'}Board`] || []
+  return baseCost + (opposingBoard.includes('static-stand') ? 1 : 0)
+}
 const normalizeInfluenceSlots = (board = []) => board.length === 3 ? [...board] : [...board.filter(Boolean).slice(0, 3), null, null, null].slice(0, 3)
 const appendHandOrder = (state, side, ids) => {
   const key = `${side}HandOrder`
@@ -47,8 +53,9 @@ export function createMatchState({ playerDeck, opponentDeck, maxComfort = 16, st
     playerDeck: playerCards.slice(openingHandSize), playerHand: playerOpeningHand, playerHandOrder: [...new Set(playerOpeningHand)], playerDiscard: [], playerBoard: [null,null,null], playerSupplies: playerDeck.faction === 'archangels' ? 3 : 0,
     opponentDeck: opponentCards.slice(openingHandSize), opponentHand: opponentOpeningHand, opponentHandOrder: [...new Set(opponentOpeningHand)], opponentDiscard: [], opponentBoard: [null,null,null], opponentSupplies: opponentDeck.faction === 'archangels' ? 3 : 0,
     playerChronicDampnessCharges: 0, opponentChronicDampnessCharges: 0,
+    playerIgnoringHotspotCharges: 0, opponentIgnoringHotspotCharges: 0,
     conditions: [], playerConditionPlayed: false, opponentConditionPlayed: false,
-    pendingSearch: null, pendingInfluence: null,
+    pendingSearch: null, pendingInfluence: null, pendingInfluenceRemoval: null,
     log: [{ round: 1, phase: 'Setup', actor: 'system', text: `${playerDeck.name} faces ${opponentDeck.name}. Both players drew ${openingHandSize} cards.` }], result: null,
     metrics: { cardsPlayed: { player: 0, opponent: 0 }, deadCarePlays: 0, conditionTriggers: 0, comfortHistory: [maxComfort * startingComfortRatio], handHistory: [{ player: openingHandSize, opponent: openingHandSize }] },
   }
@@ -56,8 +63,14 @@ export function createMatchState({ playerDeck, opponentDeck, maxComfort = 16, st
 
 export function eligibleTargets(state, card, getCard) {
   return card.faction === 'archangels' && (card.type === 'Care Action' || card.id === 'dr-honeyfoot')
-    ? state.conditions.filter((condition) => card.id === 'dr-honeyfoot' || getCard(condition.cardId)?.subtype === card.subtype) : []
+    ? state.conditions.filter((condition) => card.id === 'dr-honeyfoot' || (card.targetSubtypes || [card.subtype]).includes(getCard(condition.cardId)?.subtype)) : []
 }
+
+const matchesSearch = (search, card) => Boolean(card) && (
+  search.allowedTypes?.includes(card.type)
+  || (search.subtype && card.subtype === search.subtype)
+  || (search.trait && card.traits?.includes(search.trait))
+)
 
 export function conditionPlayStatus(state, card, side) {
   if (card.type !== 'Condition') return { allowed: true, reason: null }
@@ -89,20 +102,24 @@ function placeInfluence(state, { card, side, slotIndex }) {
   const dampKey = `${side}ChronicDampnessCharges`
   if (replacedId === 'chronic-dampness') next[dampKey] = Math.min(next[dampKey] || 0, slots.filter((id) => id === 'chronic-dampness').length)
   if (card.id === 'chronic-dampness') next[dampKey] = (next[dampKey] || 0) + 1
+  const hotspotKey = `${side}IgnoringHotspotCharges`
+  if (replacedId === 'ignoring-hotspot') next[hotspotKey] = Math.min(next[hotspotKey] || 0, slots.filter((id) => id === 'ignoring-hotspot').length)
+  if (card.id === 'ignoring-hotspot') next[`${side}IgnoringHotspotCharges`] = (next[`${side}IgnoringHotspotCharges`] || 0) + 1
   return { next, replacedId }
 }
 
-export function playCard(state, { card, side, getCard, targetKey = null, deferSearch = false, deferInfluence = false }) {
+export function playCard(state, { card, side, getCard, targetKey = null, deferSearch = false, deferInfluence = false, deferRemoval = false }) {
   const isPlayer = side === 'player'
   const handKey = `${side}Hand`, discardKey = `${side}Discard`, boardKey = `${side}Board`, suppliesKey = `${side}Supplies`
   if (!state[handKey].includes(card.id)) return state
-  if (card.faction === 'archangels' && card.cost > state[suppliesKey]) return state
+  const supplyCost = cardSupplyCost(state, card, side)
+  if (card.faction === 'archangels' && supplyCost > state[suppliesKey]) return state
   if (!conditionPlayStatus(state, card, side).allowed) return state
   let next = { ...state, metrics: { ...state.metrics, cardsPlayed: { ...state.metrics.cardsPlayed, [side]: state.metrics.cardsPlayed[side] + 1 } }, [handKey]: removeFromHand(state[handKey], card.id) }
   const logEntry = { round: state.round, phase: isPlayer ? 'Your turn' : "Opponent's turn", actor: side, cardId: card.id, text: `${isPlayer ? 'You played' : 'Opponent played'} ${card.name}.` }
   if (card.id === 'fountain-youth') return resolveResult({ ...next, comfort: state.maxComfort, [discardKey]: [...next[discardKey], card.id], log: [...next.log, logEntry] }, state.maxComfort)
   if (card.id === 'eternity') return resolveResult({ ...next, comfort: 0, [discardKey]: [...next[discardKey], card.id], log: [...next.log, logEntry] }, state.maxComfort)
-  if (card.faction === 'archangels') next[suppliesKey] -= card.cost
+  if (card.faction === 'archangels') next[suppliesKey] -= supplyCost
   const resolutionEntries = []
   let honeyfootDrawnId = null
   if (card.type === 'Condition') {
@@ -114,7 +131,19 @@ export function playCard(state, { card, side, getCard, targetKey = null, deferSe
       next[dampChargeKey] -= 1
       resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: 'chronic-dampness', text: `Chronic Dampness gave ${card.name} +2 Severity.` })
     }
-    const layerSeverity = card.severity + pressureBonus + dampBonus
+    const hotspotChargeKey = `${side}IgnoringHotspotCharges`
+    const usesHotspotCharge = card.subtype === 'Surface' && (next[hotspotChargeKey] || 0) > 0
+    const hotspotBonus = usesHotspotCharge ? 2 : 0
+    if (usesHotspotCharge) {
+      next[hotspotChargeKey] -= 1
+      const hotspotIndex = next[boardKey].indexOf('ignoring-hotspot')
+      if (hotspotIndex >= 0) next[boardKey] = normalizeInfluenceSlots(next[boardKey]).map((id, index) => index === hotspotIndex ? null : id)
+      next[discardKey] = [...next[discardKey], 'ignoring-hotspot']
+      next.comfort -= card.discomfort || 0
+      resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: 'ignoring-hotspot', text: `Ignoring the Hotspot gave ${card.name} +2 Severity and immediately dealt ${card.discomfort || 0} Discomfort.` })
+    }
+    const shoeBonus = card.id === 'bunionette' && next[boardKey].some((id) => getCard(id)?.type === 'Shoe Attribute') ? 1 : 0
+    const layerSeverity = card.severity + pressureBonus + dampBonus + hotspotBonus + shoeBonus
     const existingStack = next.conditions.find((condition) => condition.cardId === card.id)
     next.conditions = existingStack
       ? next.conditions.map((condition) => condition.key === existingStack.key ? { ...condition, layers: [...(condition.layers || [condition.severity]), layerSeverity], copies: condition.copies + 1, severity: condition.severity + layerSeverity } : condition)
@@ -124,7 +153,7 @@ export function playCard(state, { card, side, getCard, targetKey = null, deferSe
     const targetIndex = next.conditions.findIndex((condition) => targetKey ? condition.key === targetKey : card.id === 'dr-honeyfoot' || (card.type === 'Care Action' && getCard(condition.cardId)?.subtype === card.subtype))
     let severityRemoved = 0
     if (targetIndex >= 0 && card.faction === 'archangels') {
-      const baseReduction = ['hydro-bandage', 'antifungal-cream'].includes(card.id) ? 4 : ['comfort-stretch', 'heel-balm', 'proper-trimming'].includes(card.id) ? 3 : 2
+      const baseReduction = card.id === 'paraffin-treatment' ? 5 : ['hydro-bandage', 'antifungal-cream'].includes(card.id) ? 4 : ['comfort-stretch', 'heel-balm', 'proper-trimming', 'pumice-stone'].includes(card.id) ? 3 : 2
       const targetCard = getCard(next.conditions[targetIndex].cardId)
       const kineticBonus = targetCard?.id === 'toe-cramp' && (card.traits?.includes('Kinetic') || ['basic-massage','comfort-stretch'].includes(card.id)) ? 1 : 0
       const precisionBonus = targetCard?.id === 'spiking-corner' && (card.traits?.includes('Precision') || card.id === 'proper-trimming') ? 1 : 0
@@ -134,29 +163,43 @@ export function playCard(state, { card, side, getCard, targetKey = null, deferSe
       if (card.type === 'Care Action') resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${card.name} removed ${severityRemoved} Severity${kineticBonus ? ' (including +1 against Toe Cramp)' : precisionBonus ? ' (including +1 against The Spiking Corner)' : ''} and restored ${severityRemoved} Comfort.` })
       next.conditions = next.conditions.map((condition, index) => index === targetIndex ? reduced : condition).filter((condition) => condition.copies > 0)
       next[discardKey] = [...next[discardKey], card.id, ...Array.from({ length: reduced.removedCopies }, () => reduced.cardId)]
+      const drawCount = card.id === 'reflexology-session' ? 1 + (reduced.copies === 0 ? 1 : 0) : card.id === 'paraffin-treatment' && reduced.copies === 0 ? 1 : 0
+      for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 1) {
+        const draw = drawOne(next[`${side}Deck`], next[`${side}Hand`], card.faction)
+        const drawnId = draw.hand.at(-1)
+        next[`${side}Deck`] = draw.deck
+        next[`${side}Hand`] = draw.hand
+        next = appendHandOrder(next, side, [drawnId])
+        resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${card.name} drew a card.`, details: [{ cardId: drawnId, visibility: side, text: `${isPlayer ? 'You drew' : 'Opponent drew'} ${getCard(drawnId)?.name || 'a card'}.` }] })
+      }
     } else {
       if (card.type === 'Care Action') { next.comfort += 1; next.metrics = { ...next.metrics, deadCarePlays: next.metrics.deadCarePlays + 1 }; resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${card.name} had no legal target and restored 1 Comfort.` }) }
       next[discardKey] = [...next[discardKey], card.id]
     }
     if (card.type === 'Care Action' && targetIndex >= 0) next.comfort += severityRemoved
     if (card.id === 'dr-honeyfoot') { const draw = drawOne(next[`${side}Deck`], next[`${side}Hand`], card.faction); honeyfootDrawnId = draw.hand.at(-1); next[`${side}Deck`] = draw.deck; next[`${side}Hand`] = draw.hand; next = appendHandOrder(next, side, [honeyfootDrawnId]) }
-    if (card.id === 'haider') {
+    if (['haider', 'podiatrist-consultation', 'baron-blister'].includes(card.id)) {
       const deckKey = `${side}Deck`
-      const shoeIndex = next[deckKey].findIndex((id) => getCard(id)?.type === 'Shoe Attribute')
+      const searchRules = card.id === 'haider'
+        ? { allowedTypes: ['Shoe Attribute'], label: 'Shoe Attribute' }
+        : card.id === 'podiatrist-consultation'
+          ? { allowedTypes: ['Equipment', 'Care Action'], label: 'Equipment or Care Action' }
+          : { subtype: 'Surface', trait: 'Friction', label: 'Surface Condition or Friction card' }
+      const searchIndex = next[deckKey].findIndex((id) => matchesSearch(searchRules, getCard(id)))
       if (deferSearch) next.pendingSearch = {
-        side, sourceCardId: card.id, cardType: 'Shoe Attribute', maxSelections: 1,
+        side, sourceCardId: card.id, ...searchRules, cardType: searchRules.allowedTypes?.length === 1 ? searchRules.allowedTypes[0] : searchRules.label, maxSelections: 1,
         logLengthBefore: state.log.length,
         discardLengthBefore: state[discardKey].length,
         suppliesBefore: state[suppliesKey],
         cardsPlayedBefore: state.metrics.cardsPlayed[side],
       }
-      else if (shoeIndex >= 0) {
-        const shoeId = next[deckKey][shoeIndex]
-        next[deckKey] = [...next[deckKey].slice(0, shoeIndex), ...next[deckKey].slice(shoeIndex + 1)]
-        next[handKey] = [...next[handKey], shoeId]
-        next = appendHandOrder(next, side, [shoeId])
-        resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: shoeId, text: `${card.name} revealed ${getCard(shoeId).name}, added it to ${isPlayer ? 'your' : 'the opponent’s'} hand, then shuffled the deck.`, details: [{ cardId: shoeId, visibility: 'public', text: `Revealed ${getCard(shoeId).name}.` }] })
-      } else resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${card.name} found no Shoe Attribute in the deck.` })
+      else if (searchIndex >= 0) {
+        const foundId = next[deckKey][searchIndex]
+        next[deckKey] = [...next[deckKey].slice(0, searchIndex), ...next[deckKey].slice(searchIndex + 1)]
+        next[handKey] = [...next[handKey], foundId]
+        next = appendHandOrder(next, side, [foundId])
+        resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: foundId, text: `${card.name} revealed ${getCard(foundId).name}, added it to ${isPlayer ? 'your' : 'the opponent’s'} hand, then shuffled the deck.`, details: [{ cardId: foundId, visibility: 'public', text: `Revealed ${getCard(foundId).name}.` }] })
+      } else resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${card.name} found no ${searchRules.label} in the deck.` })
     }
   } else if (isInfluenceCard(card)) {
     if (deferInfluence) next.pendingInfluence = {
@@ -164,6 +207,8 @@ export function playCard(state, { card, side, getCard, targetKey = null, deferSe
       logLengthBefore: state.log.length,
       suppliesBefore: state[suppliesKey],
       cardsPlayedBefore: state.metrics.cardsPlayed[side],
+      boardBefore: [...state[boardKey]],
+      discardBefore: [...state[discardKey]],
     }
     else {
       const slots = normalizeInfluenceSlots(next[boardKey])
@@ -171,6 +216,19 @@ export function playCard(state, { card, side, getCard, targetKey = null, deferSe
       const placed = placeInfluence(next, { card, side, slotIndex: openSlot >= 0 ? openSlot : 0 })
       next = placed.next
       if (placed.replacedId) resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: placed.replacedId, text: `${card.name} replaced ${getCard(placed.replacedId).name}.` })
+      if (card.id === 'orthotic-inserts') {
+        const opposingSide = side === 'player' ? 'opponent' : 'player'
+        const opposingBoardKey = `${opposingSide}Board`, opposingDiscardKey = `${opposingSide}Discard`
+        const removableIndex = next[opposingBoardKey].findIndex((id) => ['Shoe Attribute', 'Hazard'].includes(getCard(id)?.type))
+        if (deferRemoval && removableIndex >= 0) {
+          next.pendingInfluenceRemoval = { side, sourceCardId: card.id, opposingSide, boardBefore: [...state[boardKey]], discardBefore: [...state[discardKey]], suppliesBefore: state[suppliesKey], cardsPlayedBefore: state.metrics.cardsPlayed[side], logLengthBefore: state.log.length }
+        } else if (removableIndex >= 0) {
+          const removedId = next[opposingBoardKey][removableIndex]
+          next[opposingBoardKey] = normalizeInfluenceSlots(next[opposingBoardKey]).map((id, index) => index === removableIndex ? null : id)
+          next[opposingDiscardKey] = [...next[opposingDiscardKey], removedId]
+          resolutionEntries.push({ round: state.round, phase: logEntry.phase, actor: side, cardId: removedId, text: `${card.name} discarded ${getCard(removedId).name}.` })
+        }
+      }
     }
   } else next[discardKey] = [...next[discardKey], card.id]
   const extra = card.id === 'dr-honeyfoot' ? [{ round: state.round, phase: logEntry.phase, actor: side, cardId: card.id, text: `${isPlayer ? 'You drew' : 'Opponent drew'} a card with Dr. Honeyfoot.`, details: honeyfootDrawnId ? [{ cardId: honeyfootDrawnId, visibility: side, text: `${isPlayer ? 'You drew' : 'Opponent drew'} ${getCard(honeyfootDrawnId)?.name || 'a card'}.` }] : [] }] : []
@@ -184,7 +242,47 @@ export function resolveInfluencePlacement(state, { slotIndex, getCard }) {
   if (!card) return state
   const placed = placeInfluence({ ...state, pendingInfluence: null }, { card, side: pending.side, slotIndex })
   const text = placed.replacedId ? `${card.name} replaced ${getCard(placed.replacedId).name} in Influence slot ${slotIndex + 1}.` : `${card.name} entered Influence slot ${slotIndex + 1}.`
-  return { ...placed.next, log: [...placed.next.log, { round: state.round, phase: pending.side === 'player' ? 'Your turn' : "Opponent's turn", actor: pending.side, cardId: card.id, text }] }
+  let next = { ...placed.next, log: [...placed.next.log, { round: state.round, phase: pending.side === 'player' ? 'Your turn' : "Opponent's turn", actor: pending.side, cardId: card.id, text }] }
+  if (card.id === 'orthotic-inserts') {
+    const opposingSide = pending.side === 'player' ? 'opponent' : 'player'
+    const boardKey = `${opposingSide}Board`, discardKey = `${opposingSide}Discard`
+    const removableIndex = next[boardKey].findIndex((id) => ['Shoe Attribute', 'Hazard'].includes(getCard(id)?.type))
+    if (removableIndex >= 0) {
+      next.pendingInfluenceRemoval = { side: pending.side, sourceCardId: card.id, opposingSide, boardBefore: pending.boardBefore, discardBefore: pending.discardBefore, suppliesBefore: pending.suppliesBefore, cardsPlayedBefore: pending.cardsPlayedBefore, logLengthBefore: pending.logLengthBefore }
+    }
+  }
+  return next
+}
+
+export function resolveInfluenceRemoval(state, { slotIndex, getCard }) {
+  const pending = state.pendingInfluenceRemoval
+  if (!pending || slotIndex < 0 || slotIndex > 2) return state
+  const boardKey = `${pending.opposingSide}Board`, discardKey = `${pending.opposingSide}Discard`
+  const removedId = state[boardKey][slotIndex]
+  if (!['Shoe Attribute', 'Hazard'].includes(getCard(removedId)?.type)) return state
+  return {
+    ...state,
+    [boardKey]: normalizeInfluenceSlots(state[boardKey]).map((id, index) => index === slotIndex ? null : id),
+    [discardKey]: [...state[discardKey], removedId],
+    pendingInfluenceRemoval: null,
+    log: [...state.log, { round: state.round, phase: pending.side === 'player' ? 'Your turn' : "Opponent's turn", actor: pending.side, cardId: removedId, text: `${getCard(pending.sourceCardId).name} discarded ${getCard(removedId).name}.` }],
+  }
+}
+
+export function cancelInfluenceRemoval(state) {
+  const pending = state.pendingInfluenceRemoval
+  if (!pending) return state
+  const handKey = `${pending.side}Hand`, boardKey = `${pending.side}Board`, discardKey = `${pending.side}Discard`, suppliesKey = `${pending.side}Supplies`
+  return appendHandOrder({
+    ...state,
+    [handKey]: [...state[handKey], pending.sourceCardId],
+    [boardKey]: pending.boardBefore,
+    [discardKey]: pending.discardBefore,
+    [suppliesKey]: pending.suppliesBefore,
+    pendingInfluenceRemoval: null,
+    metrics: { ...state.metrics, cardsPlayed: { ...state.metrics.cardsPlayed, [pending.side]: pending.cardsPlayedBefore } },
+    log: state.log.slice(0, pending.logLengthBefore),
+  }, pending.side, [pending.sourceCardId])
 }
 
 export function cancelInfluencePlacement(state) {
@@ -207,12 +305,12 @@ export function resolveDeckSearch(state, { deckIndex = null, getCard, random = M
   if (!search) return state
   const deckKey = `${search.side}Deck`, handKey = `${search.side}Hand`
   const selectedId = Number.isInteger(deckIndex) ? state[deckKey][deckIndex] : null
-  const validSelection = selectedId && getCard(selectedId)?.type === search.cardType
+  const validSelection = selectedId && matchesSearch(search, getCard(selectedId))
   const remainingDeck = validSelection ? [...state[deckKey].slice(0, deckIndex), ...state[deckKey].slice(deckIndex + 1)] : [...state[deckKey]]
   const actorLabel = search.side === 'player' ? 'You' : 'Opponent'
   const resultText = validSelection
     ? `${actorLabel} revealed ${getCard(selectedId).name}, added it to ${search.side === 'player' ? 'your' : 'the opponent’s'} hand, then shuffled the deck.`
-    : `${actorLabel} completed the search without finding a ${search.cardType}.`
+    : `${actorLabel} completed the search without finding a ${search.label}.`
   const resolved = {
     ...state,
     [deckKey]: shuffleCards(remainingDeck, random),

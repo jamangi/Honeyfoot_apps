@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cancelDeckSearch, cancelInfluencePlacement, createMatchState, finishRound, playCard, resolveDeckSearch, resolveInfluencePlacement } from '../src/game/engine.js'
+import { cancelDeckSearch, cancelInfluencePlacement, cancelInfluenceRemoval, cardSupplyCost, createMatchState, finishRound, playCard, resolveDeckSearch, resolveInfluencePlacement, resolveInfluenceRemoval } from '../src/game/engine.js'
 import { playArchangelTurn } from '../src/game/archangel-ai.js'
 import { applyFactionExperience, matchRewards, xpRequiredForNextLevel } from '../src/game/economy.js'
 
@@ -11,8 +11,18 @@ const cards = [
   { id: 'hard-floors', name: 'Commercial Hard Floors', faction: 'callus', type: 'Hazard', subtype: 'Structural', severity: 0, discomfort: 0, cost: 0 },
   { id: 'haider', name: 'Haider', faction: 'callus', type: 'Supporter', subtype: null, severity: 0, discomfort: 0, cost: 0 },
   { id: 'narrow-box', name: 'Aggressive Taper', faction: 'callus', type: 'Shoe Attribute', subtype: 'Structural', severity: 0, discomfort: 0, cost: 0 },
-  { id: 'basic-massage', name: 'Basic Massage', faction: 'archangels', type: 'Care Action', subtype: 'Structural', severity: 0, discomfort: 0, cost: 0 },
+  { id: 'basic-massage', name: 'Basic Massage', faction: 'archangels', type: 'Care Action', subtype: 'Structural', traits: ['Kinetic'], severity: 0, discomfort: 0, cost: 0 },
   { id: 'care-kit', name: 'Everyday Care Kit', faction: 'archangels', type: 'Equipment', subtype: null, severity: 0, discomfort: 0, cost: 2 },
+  { id: 'paraffin-treatment', name: 'Paraffin Wax Treatment', faction: 'archangels', type: 'Care Action', subtype: 'Surface', traits: ['Topical'], cost: 2 },
+  { id: 'podiatrist-consultation', name: 'Podiatrist Consultation', faction: 'archangels', type: 'Supporter', traits: ['Search'], cost: 1 },
+  { id: 'pumice-stone', name: 'Pumice Stone', faction: 'archangels', type: 'Care Action', subtype: 'Surface', targetSubtypes: ['Surface','Keratin'], traits: ['Precision'], cost: 1 },
+  { id: 'reflexology-session', name: 'Reflexology Session', faction: 'archangels', type: 'Care Action', subtype: 'Structural', traits: ['Kinetic'], cost: 1 },
+  { id: 'orthotic-inserts', name: 'Orthotic Shoe Inserts', faction: 'archangels', type: 'Equipment', traits: ['Tools'], cost: 2 },
+  { id: 'bunionette', name: 'Bunionette', faction: 'callus', type: 'Condition', subtype: 'Structural', traits: ['Pressure'], severity: 4, discomfort: 1, cost: 0 },
+  { id: 'mild-fissures', name: 'Mild Heel Fissures', faction: 'callus', type: 'Condition', subtype: 'Surface', traits: ['Friction'], severity: 4, discomfort: 1, cost: 0 },
+  { id: 'ignoring-hotspot', name: 'Ignoring the Hotspot', faction: 'callus', type: 'Habit', traits: ['Friction'], cost: 0 },
+  { id: 'static-stand', name: 'The Static Stand', faction: 'callus', type: 'Hazard', traits: ['Pressure'], cost: 0 },
+  { id: 'baron-blister', name: 'Baron von Blister', faction: 'callus', type: 'Supporter', traits: ['Friction'], cost: 0 },
 ]
 const getCard = (id) => cards.find((card) => card.id === id)
 const deck = (name, faction, id) => ({ name, faction, cards: { [id]: 5 } })
@@ -160,6 +170,82 @@ const base = () => createMatchState({ playerDeck: deck('Callus','callus','chroni
   const stayedLower = applyFactionExperience({ level: 5, selectedLevel: 2, xp: xpRequiredForNextLevel(5) - 50 }, 100)
   assert.equal(stayedLower.level, 6, 'earned XP should unlock the next level while a lower challenge is selected')
   assert.equal(stayedLower.selectedLevel, 2, 'leveling from a lower selection should preserve that deliberate selection')
+}
+
+{
+  let state = { ...base(), comfort: 8, playerHand: ['paraffin-treatment'], playerDeck: ['basic-massage'], playerDiscard: [], playerSupplies: 3, conditions: [{ key: 'surface', cardId: 'mild-fissures', layers: [4], copies: 1, severity: 4, owner: 'opponent' }] }
+  state = playCard(state, { card: getCard('paraffin-treatment'), side: 'player', getCard, targetKey: 'surface' })
+  assert.equal(state.conditions.length, 0, 'Paraffin should remove up to 5 Surface Severity')
+  assert.equal(state.comfort, 12, 'Paraffin should restore only the Severity actually removed')
+  assert.equal(state.playerHand.includes('basic-massage'), true, 'Paraffin should draw after removing the Condition')
+}
+
+{
+  let state = { ...base(), playerHand: ['reflexology-session'], playerDeck: ['basic-massage','care-kit'], playerDiscard: [], playerSupplies: 3, conditions: [{ key: 'structural', cardId: 'toe-cramp', layers: [3], copies: 1, severity: 3, owner: 'opponent' }] }
+  state = playCard(state, { card: getCard('reflexology-session'), side: 'player', getCard, targetKey: 'structural' })
+  assert.equal(state.conditions.length, 0, 'Reflexology should receive the Kinetic bonus against Toe Cramp')
+  assert.equal(state.playerHand.length, 2, 'Reflexology should draw one card plus a removal bonus card')
+}
+
+{
+  let state = { ...base(), playerHand: ['podiatrist-consultation'], playerDeck: ['basic-massage','care-kit'], playerDiscard: [], playerSupplies: 3 }
+  state = playCard(state, { card: getCard('podiatrist-consultation'), side: 'player', getCard, deferSearch: true })
+  assert.deepEqual(state.pendingSearch.allowedTypes, ['Equipment','Care Action'], 'Podiatrist Consultation should open the shared search flow with both valid types')
+  state = resolveDeckSearch(state, { deckIndex: 1, getCard, random: () => .5 })
+  assert.equal(state.playerHand.includes('care-kit'), true, 'Podiatrist Consultation should retrieve the selected Equipment')
+}
+
+{
+  let state = { ...base(), playerHand: ['narrow-box','bunionette'], playerBoard: [], conditions: [] }
+  state = playCard(state, { card: getCard('narrow-box'), side: 'player', getCard })
+  state = playCard(state, { card: getCard('bunionette'), side: 'player', getCard })
+  assert.equal(state.conditions[0].severity, 6, 'Bunionette should gain its own Shoe bonus in addition to Aggressive Taper')
+}
+
+{
+  let state = { ...base(), comfort: 10, playerHand: ['ignoring-hotspot','mild-fissures'], playerBoard: [], playerDiscard: [], conditions: [] }
+  state = playCard(state, { card: getCard('ignoring-hotspot'), side: 'player', getCard })
+  state = playCard(state, { card: getCard('mild-fissures'), side: 'player', getCard })
+  assert.equal(state.conditions[0].severity, 6, 'Ignoring the Hotspot should add 2 entrance Severity')
+  assert.equal(state.comfort, 9, 'Ignoring the Hotspot should trigger the entering Surface Condition immediately')
+  assert.equal(state.playerBoard.includes('ignoring-hotspot'), false, 'Ignoring the Hotspot should discard itself after use')
+}
+
+{
+  const state = { ...base(), playerSupplies: 1, opponentBoard: ['static-stand'], playerHand: ['basic-massage'] }
+  assert.equal(cardSupplyCost(state, getCard('basic-massage'), 'player'), 1, 'Static Stand should tax otherwise-free Kinetic cards')
+  const played = playCard(state, { card: getCard('basic-massage'), side: 'player', getCard })
+  assert.equal(played.playerSupplies, 0, 'the Static Stand tax should be paid by the engine')
+}
+
+{
+  let state = { ...base(), playerHand: ['baron-blister'], playerDeck: ['toe-cramp','mild-fissures'], playerDiscard: [] }
+  state = playCard(state, { card: getCard('baron-blister'), side: 'player', getCard, deferSearch: true })
+  state = resolveDeckSearch(state, { deckIndex: 1, getCard, random: () => .5 })
+  assert.equal(state.playerHand.includes('mild-fissures'), true, 'Baron should retrieve a Surface Condition')
+}
+
+{
+  let state = { ...base(), playerHand: ['orthotic-inserts'], playerSupplies: 3, opponentBoard: ['narrow-box'], opponentDiscard: [] }
+  state = playCard(state, { card: getCard('orthotic-inserts'), side: 'player', getCard })
+  assert.equal(state.opponentBoard.includes('narrow-box'), false, 'Orthotic Inserts should remove an opposing Shoe Attribute')
+  assert.equal(state.opponentDiscard.includes('narrow-box'), true, 'the removed Influence should enter its owner’s discard')
+}
+
+{
+  const starting = { ...base(), playerHand: ['orthotic-inserts'], playerBoard: [], playerDiscard: [], playerSupplies: 3, opponentBoard: ['narrow-box','hard-floors',null], opponentDiscard: [] }
+  let state = playCard(starting, { card: getCard('orthotic-inserts'), side: 'player', getCard, deferRemoval: true })
+  assert.equal(state.pendingInfluenceRemoval?.sourceCardId, 'orthotic-inserts', 'Orthotic Inserts should pause when multiple removal targets are available')
+  state = resolveInfluenceRemoval(state, { slotIndex: 1, getCard })
+  assert.equal(state.opponentBoard[0], 'narrow-box', 'the unselected opposing Influence should remain')
+  assert.equal(state.opponentBoard[1], null, 'the selected opposing Influence should be removed')
+  assert.equal(state.opponentDiscard.includes('hard-floors'), true, 'the selected Influence should enter its owner’s discard')
+
+  let cancelled = playCard(starting, { card: getCard('orthotic-inserts'), side: 'player', getCard, deferRemoval: true })
+  cancelled = cancelInfluenceRemoval(cancelled)
+  assert.equal(cancelled.playerHand.includes('orthotic-inserts'), true, 'cancelling removal should return Orthotic Inserts to hand')
+  assert.deepEqual(cancelled.playerBoard, starting.playerBoard, 'cancelling removal should undo its provisional board placement')
+  assert.equal(cancelled.playerSupplies, starting.playerSupplies, 'cancelling removal should refund its Supply cost')
 }
 
 console.log('Game engine and computer-player regression checks passed.')

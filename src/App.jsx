@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { cancelDeckSearch, cancelInfluencePlacement, conditionPlayStatus, createMatchState, eligibleTargets as findEligibleTargets, finishRound, isInfluenceCard, playCard as resolveCardPlay, resolveDeckSearch, resolveInfluencePlacement } from './game/engine.js'
-import { selectCallusCard, TEST_DIFFICULTIES } from './game/callus-ai.js'
-import { playArchangelTurn } from './game/archangel-ai.js'
+import { cancelDeckSearch, cancelInfluencePlacement, cancelInfluenceRemoval, cardSupplyCost, conditionPlayStatus, createMatchState, eligibleTargets as findEligibleTargets, isInfluenceCard, playCard as resolveCardPlay, resolveDeckSearch, resolveInfluencePlacement, resolveInfluenceRemoval } from './game/engine.js'
+import { TEST_DIFFICULTIES } from './game/callus-ai.js'
+import { buildOpponentTurnTranscript, turnEventDelay } from './game/turn-displayer.js'
 import { applyFactionExperience, matchRewards, MAX_FACTION_LEVEL, xpRequiredForNextLevel } from './game/economy.js'
 import { usePlayerProfile } from './player-profile/PlayerProfileContext.jsx'
 
@@ -644,6 +644,11 @@ const testCardLibrary = [
   { id: 'care-kit', name: 'Everyday Care Kit', faction: 'archangels', type: 'Equipment', traits: ['Tools', 'Supply'], specialty: 'General', cost: 2, rarity: 'Uncommon', mark: '▣', text: 'At the start of your turn, gain 1 additional Supply.' },
   { id: 'dr-honeyfoot', name: 'Dr. Honeyfoot', faction: 'archangels', type: 'Supporter', traits: ['Clinic', 'Draw'], specialty: 'General', cost: 0, rarity: 'Rare', mark: 'H', text: 'Choose a Condition. Reduce its Severity by 2, then draw a card.' },
   { id: 'fresh-socks', name: 'Fresh Breathable Socks', faction: 'archangels', type: 'Environment', traits: ['Breathable', 'Dry'], specialty: 'Surface', cost: 1, rarity: 'Common', mark: '≈', text: 'Prevent the next Surface or Microbial trigger this round.' },
+  { id: 'paraffin-treatment', name: 'Paraffin Wax Treatment', faction: 'archangels', type: 'Care Action', subtype: 'Surface', traits: ['Topical', 'Moisture'], specialty: 'Surface', cost: 2, price: 120, mark: '◐', text: 'Reduce a Surface Condition by 5 Severity. If this removes the Condition, draw 1 card.' },
+  { id: 'podiatrist-consultation', name: 'Podiatrist Consultation', faction: 'archangels', type: 'Supporter', traits: ['Clinic', 'Search'], specialty: 'General', cost: 1, price: 300, mark: 'P', text: 'Search your deck for an Equipment or Care Action, reveal it, and add it to your hand. Then shuffle your deck.' },
+  { id: 'pumice-stone', name: 'Pumice Stone', faction: 'archangels', type: 'Care Action', subtype: 'Surface', targetSubtypes: ['Surface', 'Keratin'], traits: ['Exfoliation', 'Precision'], specialty: 'Surface', cost: 1, price: 120, mark: '◇', text: 'Reduce a Surface or Keratin Condition by 3 Severity.' },
+  { id: 'reflexology-session', name: 'Reflexology Session', faction: 'archangels', type: 'Care Action', subtype: 'Structural', traits: ['Kinetic', 'Draw'], specialty: 'Structural', cost: 1, price: 120, mark: '↝', text: 'Reduce a Structural Condition by 2 Severity, then draw 1 card. If this removes the Condition, draw 1 additional card.' },
+  { id: 'orthotic-inserts', name: 'Orthotic Shoe Inserts', faction: 'archangels', type: 'Equipment', traits: ['Orthopedic', 'Tools'], specialty: 'Structural', cost: 2, price: 300, mark: '∪', text: 'When played, discard an active Shoe Attribute or Hazard.' },
   { id: 'fountain-youth', name: 'Fountain of Youth', faction: 'archangels', type: 'Debug', specialty: 'Debug', cost: 0, rarity: 'Debug', mark: '∞', text: 'Set Comfort to its maximum. Win the game.', debug: true },
   { id: 'mild-fissures', name: 'Mild Heel Fissures', faction: 'callus', type: 'Condition', subtype: 'Surface', traits: ['Dryness', 'Heel', 'Friction'], specialty: 'Surface', cost: 0, rarity: 'Common', mark: '⌁', severity: 4, discomfort: 1, text: 'A dry, thickened heel edge beginning to split under repeated pressure.' },
   { id: 'friction-blister', name: 'Friction Blister', faction: 'callus', type: 'Condition', subtype: 'Surface', traits: ['Friction', 'Blister'], specialty: 'Surface', cost: 0, rarity: 'Common', mark: '◉', severity: 3, discomfort: 1, text: 'Gains 1 Severity when paired with a friction card.' },
@@ -651,10 +656,14 @@ const testCardLibrary = [
   { id: 'morning-dagger', name: 'The Morning Dagger', faction: 'callus', type: 'Condition', subtype: 'Structural', traits: ['Heel', 'First Step'], specialty: 'Structural', cost: 0, rarity: 'Uncommon', mark: '⟡', severity: 6, discomfort: 1, text: 'Deals 1 additional Discomfort the first time it triggers.' },
   { id: 'toe-cramp', name: 'Toe Cramp', faction: 'callus', type: 'Condition', subtype: 'Structural', traits: ['Spasm', 'Toes'], specialty: 'Structural', cost: 0, rarity: 'Common', mark: '⌇', severity: 3, discomfort: 1, text: 'Kinetic cards reduce 1 additional Severity from this Condition.' },
   { id: 'spiking-corner', name: 'The Spiking Corner', faction: 'callus', type: 'Condition', subtype: 'Keratin', traits: ['Nail', 'Pressure', 'Toe'], specialty: 'Keratin', cost: 0, rarity: 'Uncommon', mark: '⌝', severity: 4, discomfort: 1, text: 'Precision Care Actions reduce 1 additional Severity from this Condition.' },
+  { id: 'bunionette', name: 'Bunionette', faction: 'callus', type: 'Condition', subtype: 'Structural', traits: ['Pressure', 'Toes'], specialty: 'Structural', cost: 0, price: 120, mark: '◔', severity: 4, discomfort: 1, text: 'Enters with +1 Severity if a Shoe Attribute is in play.' },
   { id: 'narrow-box', name: 'Aggressive Taper', faction: 'callus', type: 'Shoe Attribute', traits: ['Compression', 'Toe Box'], specialty: 'Structural', cost: 0, rarity: 'Uncommon', mark: '〉', text: 'Surface and Structural Conditions enter with +1 Severity. This effect does not stack.' },
   { id: 'chronic-dampness', name: 'Chronic Dampness', faction: 'callus', type: 'Habit', traits: ['Moisture', 'Fungal'], specialty: 'Microbial', cost: 0, rarity: 'Common', mark: '≈', text: 'Your next Microbial Condition enters with +2 Severity.' },
   { id: 'hard-floors', name: 'Commercial Hard Floors', faction: 'callus', type: 'Hazard', traits: ['Impact', 'Occupation'], specialty: 'Structural', cost: 0, rarity: 'Common', mark: '▤', text: 'Only if a Structural Condition is in play, deal 1 Discomfort during each Care Check. This effect does not stack.' },
+  { id: 'ignoring-hotspot', name: 'Ignoring the Hotspot', faction: 'callus', type: 'Habit', traits: ['Neglect', 'Friction'], specialty: 'Surface', cost: 0, price: 300, mark: '!', text: 'Your next Surface Condition enters with +2 Severity and immediately deals its Discomfort. Then discard this card.' },
+  { id: 'static-stand', name: 'The Static Stand', faction: 'callus', type: 'Hazard', traits: ['Stagnation', 'Pressure'], specialty: 'Structural', cost: 0, price: 300, mark: 'Ⅱ', text: 'Kinetic Care Actions cost 1 Supply while this card is active. This effect does not stack.' },
   { id: 'haider', name: 'Haider', faction: 'callus', type: 'Supporter', traits: ['Shoe', 'Search'], specialty: 'General', cost: 0, rarity: 'Rare', mark: 'H', text: 'Search your deck for a Shoe Attribute, reveal it, and add it to your hand. Then shuffle your deck.' },
+  { id: 'baron-blister', name: 'Baron von Blister', faction: 'callus', type: 'Supporter', traits: ['Friction', 'Search'], specialty: 'Surface', cost: 0, price: 300, mark: 'B', text: 'Search your deck for a Surface Condition or a card with the Friction trait, reveal it, and add it to your hand. Then shuffle your deck.' },
   { id: 'eternity', name: 'Eternity', faction: 'callus', type: 'Debug', specialty: 'Debug', cost: 0, rarity: 'Debug', mark: '∞', text: 'Set Comfort to zero. Win the game.', debug: true },
 ]
 
@@ -689,17 +698,20 @@ function cardWithEntrancePreview(card, state, side) {
   const board = state[`${side}Board`] || []
   const taperBonus = board.includes('narrow-box') && ['Surface','Structural'].includes(card.subtype) ? 1 : 0
   const dampBonus = card.subtype === 'Microbial' && (state[`${side}ChronicDampnessCharges`] || 0) > 0 ? 2 : 0
-  const severityBoost = taperBonus + dampBonus
+  const bunionetteBonus = card.id === 'bunionette' && board.some((id) => cardById(id)?.type === 'Shoe Attribute') ? 1 : 0
+  const hotspotBonus = card.subtype === 'Surface' && (state[`${side}IgnoringHotspotCharges`] || 0) > 0 ? 2 : 0
+  const severityBoost = taperBonus + dampBonus + bunionetteBonus + hotspotBonus
   return severityBoost ? { ...card, severity: card.severity + severityBoost, severityBoost } : card
 }
 
-function BoardCard({ card, count = 1, hidden = false, onClick, compact = false, currentSupply = null, highlighted = false }) {
+function BoardCard({ card, count = 1, hidden = false, onClick, compact = false, currentSupply = null, supplyCost = null, highlighted = false }) {
   if (hidden) return <div className="board-card board-card-back" aria-label={`${count} hidden cards`}><span>✦</span>{count > 1 && <b>{count}</b>}</div>
-  const unaffordable = currentSupply !== null && card.faction === 'archangels' && card.cost > currentSupply
+  const displayedSupplyCost = supplyCost ?? card.cost
+  const unaffordable = currentSupply !== null && card.faction === 'archangels' && displayedSupplyCost > currentSupply
   return (
     <button className={`board-card specialty-${card.specialty.toLowerCase()} ${compact ? 'compact' : ''} ${unaffordable ? 'is-unaffordable' : ''} ${card.severityBoost ? 'has-severity-boost' : ''} ${highlighted ? 'tutorial-highlight' : ''}`} onClick={onClick}>
       <span className="board-card-mark">{card.mark}</span>
-      {card.faction === 'archangels' && card.cost > 0 && <span className="board-supply-cost" aria-label={`${card.cost} Supply cost`}>{card.cost}</span>}
+      {card.faction === 'archangels' && displayedSupplyCost > 0 && <span className="board-supply-cost" aria-label={`${displayedSupplyCost} Supply cost`}>{displayedSupplyCost}</span>}
       <small>{card.type}{card.subtype ? ` · ${card.subtype}` : ''}</small>
       <strong>{card.name}</strong>
       {card.severity && <em>{card.severity}{card.severityBoost ? <small>+{card.severityBoost}</small> : null}</em>}
@@ -726,7 +738,7 @@ function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
   }
 }
 
-function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null }) {
+function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null, animationSettings }) {
   const isTutorial = Boolean(tutorialFaction)
   const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v3` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
   const [match, setMatch] = useState(() => {
@@ -751,7 +763,12 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
   const [skipReplacementConfirm, setSkipReplacementConfirm] = useState(false)
   const [expandedLogEntries, setExpandedLogEntries] = useState({})
   const [matchReward, setMatchReward] = useState(null)
+  const [turnPlayback, setTurnPlayback] = useState(null)
+  const [concedeConfirm, setConcedeConfirm] = useState(false)
   const selectedCard = cardById(selectedId)
+  const activeTurnEvent = turnPlayback?.events[turnPlayback.index] || null
+  const systemReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reducedMotion = animationSettings.reducedMotion === 'on' || (animationSettings.reducedMotion === 'system' && systemReducedMotion)
   const tutorialPromptCardIds = tutorialGuide === 'archangel-round1-care-kit' ? ['care-kit']
         : tutorialGuide === 'callus-round1-dampness' ? ['chronic-dampness', 'webbing-itch']
       : tutorialGuide === 'callus-round1-itch' ? ['webbing-itch']
@@ -833,7 +850,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
     }
     const influenceNeedsReplacement = isInfluenceCard(selectedCard) && match.playerBoard.every(Boolean)
     if (isInfluenceCard(selectedCard)) setReplacementSlot(null)
-    setMatch((current) => applyCard(current, selectedCard, 'player', null, { deferSearch: selectedCard.id === 'haider', deferInfluence: influenceNeedsReplacement }))
+    setMatch((current) => applyCard(current, selectedCard, 'player', null, { deferSearch: ['haider', 'podiatrist-consultation', 'baron-blister'].includes(selectedCard.id), deferInfluence: influenceNeedsReplacement, deferRemoval: selectedCard.id === 'orthotic-inserts' }))
     setSelectedId(null); setInspectBoard(false)
   }
   const chooseTarget = (conditionKey) => {
@@ -842,33 +859,51 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
     setMatch((current) => applyCard(current, card, 'player', conditionKey))
     setTargetingId(null)
   }
+  useEffect(() => {
+    if (!activeTurnEvent) return undefined
+    setMatch(activeTurnEvent.state)
+    const delay = turnEventDelay(activeTurnEvent, animationSettings, reducedMotion)
+    const timer = window.setTimeout(() => setTurnPlayback((current) => {
+      if (!current || current.index >= current.events.length - 1) return null
+      return { ...current, index: current.index + 1 }
+    }), delay)
+    return () => window.clearTimeout(timer)
+  }, [activeTurnEvent, animationSettings.skip, animationSettings.speed, reducedMotion])
+
   const endTurn = () => {
+    if (turnPlayback) return
     if (isTutorial) {
       setTutorialIntroOpen(false)
       setTutorialGuide((current) => current === 'archangel-round1-end' ? 'archangel-round2-balm' : current === 'archangel-round2-end' ? 'archangel-round3-cream' : current === 'callus-round1-end' ? 'callus-round2-result' : current === 'callus-round2-end' ? 'callus-round3-toe' : current === 'callus-round3-end' ? 'callus-round4-floors' : current === 'callus-round4-end' ? 'callus-round5-wait' : current === 'callus-round5-wait' ? 'callus-round6-fissures' : current === 'callus-round6-end' ? 'callus-round7-fissures' : current === 'callus-round7-end' ? 'off' : 'off')
     }
-    setMatch((current) => {
-      if (current.result) return current
-      let next = { ...current }
-      if (opponentDeck.faction === 'archangels') {
-        next = playArchangelTurn(next, cardById, difficulty, 'opponent', { maxCards: isTutorial ? 1 : Infinity })
-      } else {
-        const preferred = selectCallusCard(next, cardById, difficulty)
-        if (preferred) next = applyCard(next, preferred, 'opponent')
-      }
-      if (next.result) return next
-      return finishRound(next, { playerFaction: playerDeck.faction, opponentFaction: opponentDeck.faction, getCard: cardById })
+    if (match.result) return
+    const events = buildOpponentTurnTranscript({ state: match, playerFaction: playerDeck.faction, opponentFaction: opponentDeck.faction, difficulty, getCard: cardById, tutorial: isTutorial })
+    setTurnPlayback({ events, index: 0 })
+  }
+
+  const concedeMatch = () => {
+    setConcedeConfirm(false)
+    setSelectedId(null)
+    setTargetingId(null)
+    setMatch((current) => current.result ? current : {
+      ...current,
+      result: opponentDeck.faction,
+      playerConceded: true,
+      log: [...current.log, { round: current.round, actor: 'player', phase: 'Concede', text: 'You conceded the match.' }],
     })
   }
 
   const conditionStatus = selectedCard ? conditionPlayStatus(match, selectedCard, 'player') : { allowed: true, reason: null }
-  const canPlay = selectedCard && !(selectedCard.faction === 'archangels' && selectedCard.cost > match.playerSupplies) && conditionStatus.allowed
+  const selectedSupplyCost = selectedCard ? cardSupplyCost(match, selectedCard, 'player') : 0
+  const canPlay = selectedCard && !(selectedCard.faction === 'archangels' && selectedSupplyCost > match.playerSupplies) && conditionStatus.allowed
   const winnerName = match.result === 'archangels' ? 'The Archangels' : 'The Callus'
   const pendingSearch = match.pendingSearch
   const pendingInfluence = match.pendingInfluence
+  const pendingInfluenceRemoval = match.pendingInfluenceRemoval
   const searchDeck = pendingSearch ? match[`${pendingSearch.side}Deck`] : []
   const searchCards = searchDeck.map((id, index) => ({ id, index, card: cardById(id) })).filter((item) => item.card)
-  const validSearchCards = pendingSearch ? searchCards.filter((item) => item.card.type === pendingSearch.cardType) : []
+  const isValidSearchCard = (card) => Boolean(card) && (pendingSearch?.allowedTypes?.includes(card.type) || (pendingSearch?.subtype && card.subtype === pendingSearch.subtype) || (pendingSearch?.trait && card.traits?.includes(pendingSearch.trait)))
+  const validSearchCards = pendingSearch ? searchCards.filter((item) => isValidSearchCard(item.card)) : []
   const visibleSearchCards = searchView === 'all' ? searchCards : validSearchCards
   const selectedSearchCard = searchSelection == null ? null : searchCards.find((item) => item.index === searchSelection)
   const finishSearch = () => {
@@ -895,19 +930,24 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
     setMatch((current) => resolveInfluencePlacement(current, { slotIndex: replacementSlot, getCard: cardById }))
     setReplacementSlot(null)
   }
+  const chooseInfluenceRemoval = (slotIndex) => setMatch((current) => resolveInfluenceRemoval(current, { slotIndex, getCard: cardById }))
+  const cancelRemoval = () => setMatch((current) => cancelInfluenceRemoval(current))
   const renderInfluenceSlots = (side) => {
     const board = match[`${side}Board`]
     const choosing = pendingInfluence?.side === side
+    const choosingRemoval = pendingInfluenceRemoval?.opposingSide === side
     return [0,1,2].map((slotIndex) => {
       const id = board[slotIndex]
       const card = id ? cardById(id) : null
       if (!card) return <button key={slotIndex} className={`influence-slot empty ${choosing ? 'available' : ''}`} aria-label={choosing ? `Place Influence in slot ${slotIndex + 1}` : `Empty Influence slot ${slotIndex + 1}`} onClick={() => choosing && chooseInfluenceSlot(slotIndex)} disabled={!choosing}><i aria-hidden="true">+</i></button>
-      return <div key={slotIndex} className={`influence-slot occupied ${choosing ? 'available' : ''}`}><BoardCard card={card} compact onClick={() => choosing ? chooseInfluenceSlot(slotIndex) : setViewedCard(card)} /></div>
+      const removable = choosingRemoval && ['Shoe Attribute', 'Hazard'].includes(card.type)
+      return <div key={slotIndex} className={`influence-slot occupied ${choosing || removable ? 'available' : ''} ${choosingRemoval && !removable ? 'unavailable' : ''}`}><BoardCard card={card} compact onClick={() => choosing ? chooseInfluenceSlot(slotIndex) : removable ? chooseInfluenceRemoval(slotIndex) : setViewedCard(card)} /></div>
     })
   }
   return (
-    <div className="honeyfoot-board">
+    <div className={`honeyfoot-board ${turnPlayback ? 'is-displaying-turn' : ''} ${reducedMotion ? 'reduced-motion' : ''}`}>
       <div className="board-topline"><button onClick={onExit}>← {isTutorial ? 'Lesson' : 'Decks'}</button><span>{isTutorial ? 'Guided lesson' : `Test match · ${TEST_DIFFICULTIES[difficulty].label}`} · Round {match.round}</span><strong>{opponentDeck.name}</strong></div>
+      {concedeConfirm && <div className="board-decision-backdrop concede-backdrop"><section className="concede-dialog" role="alertdialog" aria-labelledby="concede-title"><small>End this match</small><h3 id="concede-title">Concede?</h3><p>This will immediately award the match to {opponentDeck.faction === 'archangels' ? 'the Archangels' : 'The Callus'}.</p><div><button onClick={() => setConcedeConfirm(false)}>Keep playing</button><button className="primary" onClick={concedeMatch}>Concede match</button></div></section></div>}
       <section className="board-side opponent-side">
         <CardPile label="Discard" count={match.opponentDiscard.length} faction={opponentDeck.faction} discard />
         <div className="board-hand opponent-hand">{match.opponentHand.map((id, index) => <BoardCard key={`${id}-${index}`} hidden />)}</div>
@@ -915,7 +955,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
       </section>
       <main className={`board-field ${['archangel-round2-honeyfoot', 'archangel-round2-end', 'archangel-round3-finish', 'callus-round2-result', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-blister', 'callus-round4-end', 'callus-round5-wait', 'callus-round6-fissures', 'callus-round6-end', 'callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) ? 'has-tutorial-round-two' : ''}`}>
         <div className="persistent-row opponent-persistents">{renderInfluenceSlots('opponent')}{match.opponentBoard.some(Boolean) && <span>Opponent influences</span>}</div>
-        <div className={`condition-lane ${targetingId ? 'is-targeting' : ''}`}>{match.conditions.map((condition) => {
+        <div className={`condition-lane ${targetingId ? 'is-targeting' : ''}`}><span className="condition-lane-label">Conditions</span>{match.conditions.map((condition) => {
           const card = cardById(condition.cardId)
           const validTarget = targetingId && eligibleTargets(match, cardById(targetingId)).some((target) => target.key === condition.key)
           const discomfort = card.discomfort * condition.copies
@@ -954,32 +994,37 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         {['callus-round6-fissures', 'callus-round6-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 6</small><h3>Prepare a stack.</h3><p>Our opponent is managing the Conditions well. Let’s try stacking duplicate Conditions to make a stronger one.</p><p className="tutorial-next-action">This turn, play <strong>Mild Heel Fissures</strong> and End Turn.</p></aside>}
         {['callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 7</small><h3>Layer the pressure.</h3><p>Now play another <strong>Mild Heel Fissures</strong>, which will cause it to stack onto the one in play, increasing Severity and Discomfort.</p><p className="tutorial-next-action">Then End Turn.</p></aside>}
         <div className={`persistent-row player-persistents ${pendingInfluence?.side === 'player' ? 'is-placing' : ''}`}>{renderInfluenceSlots('player')}{match.playerBoard.some(Boolean) && <span>Your influences</span>}</div>
-        <aside className="board-status"><span>Supplies <strong>{match.playerSupplies}</strong></span><button className={tutorialEndTurnHighlighted ? 'tutorial-control-highlight' : ''} onClick={endTurn} disabled={match.result || pendingInfluence || pendingSearch}>End turn</button><button className="battle-log-toggle" onClick={() => setLogOpen(true)}>☷ History</button><small>{match.log.at(-1)?.text}</small></aside>
+        <aside className="board-status"><span>Supplies <strong>{match.playerSupplies}</strong></span><button className={tutorialEndTurnHighlighted ? 'tutorial-control-highlight' : ''} onClick={endTurn} disabled={match.result || pendingInfluence || pendingSearch || pendingInfluenceRemoval || turnPlayback}>End turn</button><button className="battle-log-toggle" onClick={() => setLogOpen(true)}>☷ History</button><button className="concede-button" onClick={() => setConcedeConfirm(true)} disabled={match.result || turnPlayback}>Concede</button><small>{match.log.at(-1)?.text}</small></aside>
       </main>
       <section className="board-side player-side">
         <CardPile label="Discard" count={match.playerDiscard.length} faction={playerDeck.faction} discard />
-        <div className="board-hand">{groupedHand.map(([id, count]) => <BoardCard key={id} card={cardWithEntrancePreview(cardById(id), match, 'player')} count={count} currentSupply={match.playerSupplies} highlighted={tutorialPromptCardIds.includes(id)} onClick={() => { setSelectedId(id); setInspectBoard(false) }} />)}</div>
+        <div className="board-hand">{groupedHand.map(([id, count]) => { const card = cardWithEntrancePreview(cardById(id), match, 'player'); return <BoardCard key={id} card={card} count={count} currentSupply={match.playerSupplies} supplyCost={cardSupplyCost(match, card, 'player')} highlighted={tutorialPromptCardIds.includes(id)} onClick={() => { setSelectedId(id); setInspectBoard(false) }} /> })}</div>
         <CardPile label="Deck" count={match.playerDeck.length} faction={playerDeck.faction} />
       </section>
 
       {selectedCard && !inspectBoard && <div className="board-decision-backdrop">
         <div className="board-decision">
           <GameCard card={selectedCard} onInspect={() => {}} showTraits={false} />
-          <div><small>{selectedCard.type}{selectedCard.subtype ? ` · ${selectedCard.subtype}` : ''}</small><h3>{selectedCard.name}</h3><p>{selectedCard.text}</p>{selectedCard.faction === 'archangels' && <span className="decision-supply"><strong>Supply cost:</strong> {selectedCard.cost} · You have {match.playerSupplies}</span>}{selectedCard.traits?.length > 0 && <span>Traits: {selectedCard.traits.join(', ')}</span>}<div className="decision-actions"><button onClick={() => setSelectedId(null)}>Cancel</button><button onClick={() => setInspectBoard(true)}>Inspect board</button><button className="primary" disabled={!canPlay} onClick={playSelected}>{canPlay ? 'Play card' : !conditionStatus.allowed ? conditionStatus.reason : `Requires ${selectedCard.cost} Supplies · You have ${match.playerSupplies}`}</button></div></div>
+          <div><small>{selectedCard.type}{selectedCard.subtype ? ` · ${selectedCard.subtype}` : ''}</small><h3>{selectedCard.name}</h3><p>{selectedCard.text}</p>{selectedCard.faction === 'archangels' && <span className="decision-supply"><strong>Supply cost:</strong> {selectedSupplyCost} · You have {match.playerSupplies}</span>}{selectedCard.traits?.length > 0 && <span>Traits: {selectedCard.traits.join(', ')}</span>}<div className="decision-actions"><button onClick={() => setSelectedId(null)}>Cancel</button><button onClick={() => setInspectBoard(true)}>Inspect board</button><button className="primary" disabled={!canPlay} onClick={playSelected}>{canPlay ? 'Play card' : !conditionStatus.allowed ? conditionStatus.reason : `Requires ${selectedSupplyCost} Supplies · You have ${match.playerSupplies}`}</button></div></div>
         </div>
       </div>}
       {selectedCard && inspectBoard && <button className="return-to-decision" onClick={() => setInspectBoard(false)}><span>{selectedCard.mark}</span> Return to {selectedCard.name}</button>}
       {targetingId && <div className="targeting-banner"><div><small>Choose a Condition</small><strong>{cardById(targetingId).name}</strong></div><span>Select one of the glowing cards.</span><button onClick={() => setTargetingId(null)}>Cancel</button></div>}
       {pendingSearch && !inspectSearchBoard && <div className="deck-search-backdrop">
         <section className="deck-search-panel">
-          <header><div><small>{cardById(pendingSearch.sourceCardId).name}</small><h3>Search your deck</h3><p>Choose 1 {pendingSearch.cardType} to add to your hand.</p></div><div className="deck-search-tabs"><button className={searchView === 'valid' ? 'active' : ''} onClick={() => setSearchView('valid')}>Valid <strong>{validSearchCards.length}</strong></button><button className={searchView === 'all' ? 'active' : ''} onClick={() => setSearchView('all')}>All <strong>{searchCards.length}</strong></button></div></header>
+          <header><div><small>{cardById(pendingSearch.sourceCardId).name}</small><h3>Search your deck</h3><p>Choose 1 {pendingSearch.label} to add to your hand.</p></div><div className="deck-search-tabs"><button className={searchView === 'valid' ? 'active' : ''} onClick={() => setSearchView('valid')}>Valid <strong>{validSearchCards.length}</strong></button><button className={searchView === 'all' ? 'active' : ''} onClick={() => setSearchView('all')}>All <strong>{searchCards.length}</strong></button></div></header>
           <div className="deck-search-tools"><button onClick={() => setInspectSearchBoard(true)}>Inspect board</button><span>{searchView === 'all' ? 'Review every card remaining before the deck is shuffled.' : `${validSearchCards.length} eligible card${validSearchCards.length === 1 ? '' : 's'} found.`}</span></div>
-          <div className="deck-search-grid">{visibleSearchCards.length ? visibleSearchCards.map((item) => <button key={`${item.id}-${item.index}`} className={searchSelection === item.index ? 'selected' : ''} onClick={() => item.card.type === pendingSearch.cardType ? setSearchSelection((current) => current === item.index ? null : item.index) : setViewedCard(item.card)}><GameCard card={item.card} onInspect={() => {}} /></button>) : <div className="deck-search-empty"><strong>No valid cards</strong><span>You may inspect the full deck, then finish the search without a card.</span></div>}</div>
+          <div className="deck-search-grid">{visibleSearchCards.length ? visibleSearchCards.map((item) => <button key={`${item.id}-${item.index}`} className={searchSelection === item.index ? 'selected' : ''} onClick={() => isValidSearchCard(item.card) ? setSearchSelection((current) => current === item.index ? null : item.index) : setViewedCard(item.card)}><GameCard card={item.card} onInspect={() => {}} /></button>) : <div className="deck-search-empty"><strong>No valid cards</strong><span>You may inspect the full deck, then finish the search without a card.</span></div>}</div>
           <footer><div className={`search-selection-slot ${selectedSearchCard ? 'filled' : ''}`}>{selectedSearchCard ? <><BoardCard card={selectedSearchCard.card} compact onClick={() => setSearchSelection(null)} /><span>Selected</span></> : <><i>+</i><span>Choose 1 card</span></>}</div><div className="search-resolution-actions"><button className="cancel-search" onClick={cancelSearch}>Cancel</button><button className="finish-search" onClick={finishSearch}>{selectedSearchCard ? 'Add to hand' : 'Finish without card'}</button></div></footer>
         </section>
       </div>}
       {pendingSearch && inspectSearchBoard && <button className="return-to-decision return-to-search" onClick={() => setInspectSearchBoard(false)}><span>{cardById(pendingSearch.sourceCardId).mark}</span> Return to deck search</button>}
       {pendingInfluence && <div className="influence-placement-banner"><div><small>Choose an Influence slot</small><strong>{cardById(pendingInfluence.cardId).name}</strong></div><span>Choose an empty space or select an Influence to replace.</span><button onClick={cancelInfluence}>Cancel</button></div>}
+      {pendingInfluenceRemoval && <div className="influence-placement-banner influence-removal-banner"><div><small>Choose an opposing Influence</small><strong>{cardById(pendingInfluenceRemoval.sourceCardId).name}</strong></div><span>Select a glowing Shoe Attribute or Hazard to discard.</span><button onClick={cancelRemoval}>Cancel</button></div>}
+      {activeTurnEvent && !animationSettings.skip && <div className={`turn-display-layer event-${activeTurnEvent.type}`} aria-live="polite">
+        {activeTurnEvent.cardId ? <GameCard card={cardById(activeTurnEvent.cardId)} onInspect={() => {}} showTraits={false} /> : activeTurnEvent.type === 'draw' ? <div className={`turn-display-card-back faction-${opponentDeck.faction}`}><span>{opponentDeck.faction === 'archangels' ? '✦' : '⌁'}</span></div> : <span className="turn-display-symbol">{activeTurnEvent.type === 'care-check' ? '◎' : activeTurnEvent.type === 'turn-end' ? '→' : '•'}</span>}
+        <div><small>{activeTurnEvent.type.replace('-', ' ')}</small><h3>{activeTurnEvent.title}</h3><p>{activeTurnEvent.detail}</p></div>
+      </div>}
       {replacementSlot !== null && pendingInfluence && <div className="influence-replace-backdrop"><section className="influence-replace-dialog"><small>Influence slot {replacementSlot + 1}</small><h3>Replace this Influence?</h3><p><strong>{cardById(pendingInfluence.cardId).name}</strong> will enter this slot. <strong>{cardById(match.playerBoard[replacementSlot]).name}</strong> will be discarded.</p><label><input type="checkbox" checked={skipReplacementConfirm} onChange={(event) => setSkipReplacementConfirm(event.target.checked)} /> Don’t ask again this match</label><div><button onClick={() => setReplacementSlot(null)}>Keep current</button><button className="primary" onClick={confirmReplacement}>Replace influence</button></div></section></div>}
       {viewedCard && <div className={`board-decision-backdrop ${pendingSearch ? 'search-card-inspector' : ''}`} onClick={() => setViewedCard(null)}><div className="board-card-view" onClick={(event) => event.stopPropagation()}><button className="card-view-close" onClick={() => setViewedCard(null)} aria-label="Close card details">×</button><GameCard card={viewedCard} onInspect={() => {}} showTraits={false} /><div><small>{viewedCard.type}{viewedCard.subtype ? ` · ${viewedCard.subtype}` : ''}</small><h3>{viewedCard.name}</h3><p>{viewedCard.text}</p>{viewedCard.severity && <strong>Current Severity: {viewedCard.severity}</strong>}{viewedCard.copies > 1 && <strong>Copies in stack: {viewedCard.copies} · Discomfort: {viewedCard.currentDiscomfort}</strong>}{viewedCard.traits?.length > 0 && <span>Traits: {viewedCard.traits.join(', ')}</span>}</div></div></div>}
       {logOpen && <aside className="battle-log-panel"><header><div><small>Match record</small><h3>History</h3></div><button onClick={() => setLogOpen(false)} aria-label="Close history">×</button></header><div className="battle-log-scroll">{[...new Set(match.log.map((entry) => entry.round))].reverse().map((round) => <section key={round}><h4>Round {round}</h4>{match.log.filter((entry) => entry.round === round).map((entry, index) => { const card = entry.cardId ? cardById(entry.cardId) : null; const visibleDetails = (entry.details || []).filter((detail) => detail.visibility === 'public' || detail.visibility === 'player'); const entryKey = `${round}-${index}-${entry.phase}`; const expanded = expandedLogEntries[entryKey]; return <div className={`battle-event-wrap actor-${entry.actor}`} key={entryKey}><button className={`battle-event ${visibleDetails.length ? 'has-details' : ''}`} onClick={() => visibleDetails.length && setExpandedLogEntries((current) => ({ ...current, [entryKey]: !current[entryKey] }))}>{card ? <span className={`event-card specialty-${card.specialty.toLowerCase()}`}>{card.mark}</span> : <span className="event-dot">•</span>}<div><small>{entry.phase}</small><p>{entry.text}</p></div>{visibleDetails.length > 0 && <b aria-label={expanded ? 'Hide card details' : 'Show card details'}>{expanded ? '⌃' : '⌄'}</b>}</button>{expanded && <div className="battle-event-details">{visibleDetails.map((detail, detailIndex) => { const detailCard = detail.cardId ? cardById(detail.cardId) : null; return <button key={`${detail.cardId}-${detailIndex}`} onClick={() => detailCard && setViewedCard(detailCard)}>{detailCard ? <span className={`event-card specialty-${detailCard.specialty.toLowerCase()}`}>{detailCard.mark}</span> : <span className="event-dot">•</span>}<span><small>{detail.visibility === 'public' ? 'Revealed' : 'Private to you'}</small><strong>{detail.text}</strong></span></button> })}</div>}</div> })}</section>)}</div></aside>}
@@ -988,10 +1033,10 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
   )
 }
 
-function GameCard({ card, count = 0, incompatible = false, onInspect, onAdd, showTraits = true, showSupply = true }) {
+function GameCard({ card, count = 0, incompatible = false, locked = false, onInspect, onAdd, showTraits = true, showSupply = true }) {
   const traits = card.traits || []
   return (
-    <article className={`game-card specialty-${card.specialty.toLowerCase()} ${incompatible ? 'is-incompatible' : ''}`} onClick={() => onInspect(card)}>
+    <article className={`game-card specialty-${card.specialty.toLowerCase()} ${incompatible ? 'is-incompatible' : ''} ${locked ? 'is-locked' : ''}`} onClick={() => onInspect(card)}>
       <div className="game-card-art"><span>{card.mark}</span></div>
       {showSupply && card.faction === 'archangels' && <span className="game-card-supply" aria-label={`${card.cost} Supply cost`}>{card.cost} <small>Supply</small></span>}
       <div className="game-card-copy">
@@ -1000,7 +1045,8 @@ function GameCard({ card, count = 0, incompatible = false, onInspect, onAdd, sho
         <p>{card.text}</p>
       </div>
       {card.severity && <span className="severity-chip">{card.severity}</span>}
-      {onAdd && <button onClick={(event) => { event.stopPropagation(); onAdd(card) }} aria-label={`Add ${card.name}`} disabled={incompatible}>+</button>}
+      {locked && <span className="game-card-lock">{card.price} Petals</span>}
+      {onAdd && <button onClick={(event) => { event.stopPropagation(); onAdd(card) }} aria-label={`Add ${card.name}`} disabled={incompatible || locked}>+</button>}
       {count > 0 && <output>{count}</output>}
       {showTraits && traits.length > 0 && <div className="game-card-traits" aria-label={`Traits: ${traits.join(', ')}`}>
         {traits.slice(0, 2).map((trait) => <span key={trait}>{trait}</span>)}
@@ -1010,7 +1056,7 @@ function GameCard({ card, count = 0, incompatible = false, onInspect, onAdd, sho
   )
 }
 
-function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, difficulty, setDifficulty }) {
+function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, difficulty, setDifficulty, ownedCardIds, petals, onBuy }) {
   const [editingId, setEditingId] = useState(null)
   const [selectedId, setSelectedId] = useState(decks[0]?.id)
   const [search, setSearch] = useState('')
@@ -1021,6 +1067,7 @@ function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, d
   const [detailedCard, setDetailedCard] = useState(null)
   const selectedDeck = decks.find((deck) => deck.id === selectedId) || decks[0]
   const editingDeck = decks.find((deck) => deck.id === editingId)
+  const ownsCard = (card) => card.debug || ownedCardIds.includes(card.id)
 
   useEffect(() => {
     if (!detailedCard) return undefined
@@ -1036,7 +1083,7 @@ function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, d
 
   const updateDeck = (updater) => setDecks((current) => current.map((deck) => deck.id === editingId ? updater(deck) : deck))
   const addCard = (card) => {
-    if (!editingDeck || card.faction !== editingDeck.faction) return setInspected(card)
+    if (!editingDeck || card.faction !== editingDeck.faction || !ownsCard(card)) return setInspected(card)
     updateDeck((deck) => {
       const current = deck.cards[card.id] || 0
       if (current >= GAME_RULES.copyLimit || deckCardCount(deck) >= GAME_RULES.deckSize) return deck
@@ -1103,7 +1150,7 @@ function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, d
             <label><input type="checkbox" checked={showAllFactions} onChange={(event) => setShowAllFactions(event.target.checked)} /> Both factions</label>
             <label><input type="checkbox" checked={showDebug} onChange={(event) => setShowDebug(event.target.checked)} /> Debug</label>
           </div>
-          <div className="card-library-grid">{visibleCards.map((card) => <GameCard key={card.id} card={card} count={editingDeck.cards[card.id]} incompatible={card.faction !== editingDeck.faction} onInspect={inspectCard} onAdd={addCard} />)}</div>
+          <div className="card-library-grid">{visibleCards.map((card) => <GameCard key={card.id} card={card} count={editingDeck.cards[card.id]} incompatible={card.faction !== editingDeck.faction} locked={!ownsCard(card)} onInspect={inspectCard} onAdd={addCard} />)}</div>
         </section>
         <aside className="current-deck-panel">
           <div className="current-deck-heading"><span>{editingDeck.faction === 'archangels' ? 'Archangels' : 'The Callus'}</span><strong>{deckIsValid(editingDeck) ? 'Ready to play' : 'Deck incomplete'}</strong></div>
@@ -1116,6 +1163,8 @@ function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, d
               {inspected.faction === 'archangels' && <small className="inspector-supply"><strong>Supply cost:</strong> {inspected.cost}</small>}
               {inspected.traits?.length > 0 && <small><strong>Traits:</strong> {inspected.traits.join(', ')}</small>}
               {inspected.faction !== editingDeck.faction && <em>{inspected.faction === 'callus' ? 'The Callus only' : 'Archangels only'}</em>}
+              {!ownsCard(inspected) && <button className="buy-card-button" disabled={petals < inspected.price} onClick={() => onBuy(inspected)}><span aria-hidden="true">✿</span> Buy · {inspected.price} Petals</button>}
+              {!ownsCard(inspected) && petals < inspected.price && <small className="purchase-shortfall">You need {inspected.price - petals} more Petals.</small>}
               <button className="view-card-larger" onClick={() => setDetailedCard(inspected)}>View larger</button>
             </div>
           </div>}
@@ -1127,8 +1176,8 @@ function DeckBuilder({ decks, setDecks, activeDeckId, setActiveDeckId, onTest, d
       {detailedCard && <div className="deck-card-detail-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDetailedCard(null)}>
         <section className="deck-card-detail" role="dialog" aria-modal="true" aria-label={`${detailedCard.name} card details`}>
           <button className="deck-card-detail-close" onClick={() => setDetailedCard(null)} aria-label="Close card details">×</button>
-          <GameCard card={detailedCard} count={editingDeck.cards[detailedCard.id] || 0} onInspect={() => {}} showTraits={false} />
-          <div><small>{detailedCard.type}{detailedCard.subtype ? ` · ${detailedCard.subtype}` : ''}</small><h3>{detailedCard.name}</h3><p>{detailedCard.text}</p>{detailedCard.faction === 'archangels' && <span><strong>Supply cost:</strong> {detailedCard.cost}</span>}{detailedCard.severity && <span><strong>Starting Severity:</strong> {detailedCard.severity}</span>}{detailedCard.traits?.length > 0 && <span><strong>Traits:</strong> {detailedCard.traits.join(', ')}</span>}<span><strong>In this deck:</strong> {editingDeck.cards[detailedCard.id] || 0}</span></div>
+          <GameCard card={detailedCard} count={editingDeck.cards[detailedCard.id] || 0} locked={!ownsCard(detailedCard)} onInspect={() => {}} showTraits={false} />
+          <div><small>{detailedCard.type}{detailedCard.subtype ? ` · ${detailedCard.subtype}` : ''}</small><h3>{detailedCard.name}</h3><p>{detailedCard.text}</p>{detailedCard.faction === 'archangels' && <span><strong>Supply cost:</strong> {detailedCard.cost}</span>}{detailedCard.severity && <span><strong>Starting Severity:</strong> {detailedCard.severity}</span>}{detailedCard.traits?.length > 0 && <span><strong>Traits:</strong> {detailedCard.traits.join(', ')}</span>}<span><strong>In this deck:</strong> {editingDeck.cards[detailedCard.id] || 0}</span>{!ownsCard(detailedCard) && <button className="buy-card-button" disabled={petals < detailedCard.price} onClick={() => onBuy(detailedCard)}><span aria-hidden="true">✿</span> Buy · {detailedCard.price} Petals</button>}{!ownsCard(detailedCard) && petals < detailedCard.price && <small className="purchase-shortfall">You need {detailedCard.price - petals} more Petals.</small>}</div>
         </section>
       </div>}
     </div>
@@ -1139,8 +1188,8 @@ function HoneyfootCards() {
   const { profile: playerProfile, dispatch: playerProfileDispatch } = usePlayerProfile()
   const [section, setSection] = useState(() => localStorage.getItem('honeyfoot-card-section') || 'Home')
   const [mode, setMode] = useState(() => localStorage.getItem('honeyfoot-card-mode') || 'archangels')
-  const [theme, setTheme] = useState(() => localStorage.getItem('honeyfoot-card-theme') || 'garden')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState('themes')
   const [decks, setDecks] = useState(() => {
     try { return JSON.parse(localStorage.getItem('honeyfoot-card-decks')) || starterDecks } catch { return starterDecks }
   })
@@ -1155,10 +1204,6 @@ function HoneyfootCards() {
   const [tutorialFaction, setTutorialFaction] = useState(() => localStorage.getItem('honeyfoot-tutorial-faction') || null)
   const [firstLessonChoicePending, setFirstLessonChoicePending] = useState(() => !localStorage.getItem('honeyfoot-first-lesson-chosen'))
 
-  useEffect(() => {
-    localStorage.setItem('honeyfoot-card-theme', theme)
-  }, [theme])
-
   useEffect(() => { localStorage.setItem('honeyfoot-card-decks', JSON.stringify(decks)) }, [decks])
   useEffect(() => { localStorage.setItem('honeyfoot-active-decks', JSON.stringify(activeDeckId)) }, [activeDeckId])
   useEffect(() => { localStorage.setItem('honeyfoot-test-difficulty', testDifficulty) }, [testDifficulty])
@@ -1168,6 +1213,8 @@ function HoneyfootCards() {
   useEffect(() => { tutorialFaction ? localStorage.setItem('honeyfoot-tutorial-faction', tutorialFaction) : localStorage.removeItem('honeyfoot-tutorial-faction') }, [tutorialFaction])
 
   const activeFaction = mode === 'callus' ? 'callus' : 'archangels'
+  const theme = playerProfile.presentation.theme
+  const animationSettings = playerProfile.presentation.animations
   const activeDeck = decks.find((deck) => deck.id === activeDeckId[activeFaction])
   const activeAvatar = profileAvatars.find((avatar) => avatar.id === playerProfile.identity.avatarId)
   const factionProgress = playerProfile.progression[activeFaction]
@@ -1234,20 +1281,22 @@ function HoneyfootCards() {
         <div className="cards-wallet">
           <span className="petal-token" aria-hidden="true">✦</span>
           <strong>{playerProfile.wallet.petals.toLocaleString()}</strong>
-          <button className="cards-settings" onClick={() => setSettingsOpen((open) => !open)} aria-label="Theme settings" aria-expanded={settingsOpen}>•••</button>
+          <button className="cards-settings" onClick={() => setSettingsOpen((open) => !open)} aria-label="Card game settings" aria-expanded={settingsOpen}>•••</button>
           {settingsOpen && (
             <div className="theme-menu">
-              <small>Choose a theme</small>
-              {Object.entries(cardThemes).map(([id, item]) => (
-                <button key={id} className={theme === id ? 'active' : ''} onClick={() => { setTheme(id); setSettingsOpen(false) }}>{item.label}</button>
-              ))}
+              <div className="settings-parent-tabs"><button className={settingsSection === 'themes' ? 'active' : ''} onClick={() => setSettingsSection('themes')}>Themes</button><button className={settingsSection === 'animations' ? 'active' : ''} onClick={() => setSettingsSection('animations')}>Animations</button></div>
+              {settingsSection === 'themes' ? <><small>Choose a theme</small>{Object.entries(cardThemes).map(([id, item]) => <button key={id} className={theme === id ? 'active' : ''} onClick={() => playerProfileDispatch({ type: 'presentation/set-theme', theme: id })}>{item.label}</button>)}</> : <div className="animation-settings">
+                <label><span>Animation speed</span><select value={animationSettings.speed} onChange={(event) => playerProfileDispatch({ type: 'presentation/set-animation', field: 'speed', value: event.target.value })}><option value="relaxed">Relaxed</option><option value="standard">Standard</option><option value="quick">Quick</option></select></label>
+                <label className="setting-toggle"><span>Skip animations<small>Show results immediately.</small></span><input type="checkbox" checked={animationSettings.skip} onChange={(event) => playerProfileDispatch({ type: 'presentation/set-animation', field: 'skip', value: event.target.checked })} /></label>
+                <label><span>Reduced motion</span><select value={animationSettings.reducedMotion} onChange={(event) => playerProfileDispatch({ type: 'presentation/set-animation', field: 'reducedMotion', value: event.target.value })}><option value="system">Follow device</option><option value="on">On</option><option value="off">Off</option></select></label>
+              </div>}
             </div>
           )}
         </div>
       </header>
 
       {section === 'Board' && boardDeck && opponentDeck ? (
-        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} opponentLevel={boardProgress?.selectedLevel || 1} onMatchComplete={grantMatchRewards} tutorialFaction={tutorialFaction} onExit={() => {
+        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} opponentLevel={boardProgress?.selectedLevel || 1} onMatchComplete={grantMatchRewards} tutorialFaction={tutorialFaction} animationSettings={animationSettings} onExit={() => {
           if (tutorialFaction) { setMode('learn'); setLessonFaction(tutorialFaction); setLessonSelecting(true); setTutorialFaction(null); setSection('Home') }
           else setSection('Decks')
         }} />
@@ -1319,7 +1368,7 @@ function HoneyfootCards() {
           </div>
         </div>
       ) : section === 'Decks' ? (
-        <DeckBuilder decks={decks} setDecks={setDecks} activeDeckId={activeDeckId} setActiveDeckId={setActiveDeckId} onTest={testDeck} difficulty={testDifficulty} setDifficulty={setTestDifficulty} />
+        <DeckBuilder decks={decks} setDecks={setDecks} activeDeckId={activeDeckId} setActiveDeckId={setActiveDeckId} onTest={testDeck} difficulty={testDifficulty} setDifficulty={setTestDifficulty} ownedCardIds={playerProfile.collection.ownedCardIds} petals={playerProfile.wallet.petals} onBuy={(card) => playerProfileDispatch({ type: 'collection/buy-card', cardId: card.id, price: card.price })} />
       ) : section === 'Profile' ? (
         <PlayerProfileView profile={playerProfile} dispatch={playerProfileDispatch} />
       ) : (

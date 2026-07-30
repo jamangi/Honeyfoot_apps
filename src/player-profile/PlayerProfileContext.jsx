@@ -2,7 +2,14 @@ import { createContext, useContext, useEffect, useMemo, useReducer } from 'react
 import { applyFactionExperience } from '../game/economy.js'
 
 export const PLAYER_PROFILE_STORAGE_KEY = 'honeyfoot-player-profile'
-export const PLAYER_PROFILE_VERSION = 5
+export const PLAYER_PROFILE_VERSION = 8
+
+const STARTER_CARD_IDS = [
+  'basic-massage', 'comfort-stretch', 'heel-balm', 'hydro-bandage', 'antifungal-cream',
+  'proper-trimming', 'care-kit', 'dr-honeyfoot', 'fresh-socks', 'mild-fissures',
+  'friction-blister', 'webbing-itch', 'morning-dagger', 'toe-cramp', 'spiking-corner',
+  'narrow-box', 'chronic-dampness', 'hard-floors', 'haider',
+]
 
 const defaultFootProfile = {
   version: 1,
@@ -35,6 +42,13 @@ export const initialPlayerProfile = {
   wallet: {
     petals: 0,
   },
+  collection: {
+    ownedCardIds: STARTER_CARD_IDS,
+  },
+  presentation: {
+    theme: 'garden',
+    animations: { speed: 'relaxed', skip: false, reducedMotion: 'system' },
+  },
   progression: {
     archangels: { level: 1, selectedLevel: 1, xp: 0 },
     callus: { level: 1, selectedLevel: 1, xp: 0 },
@@ -55,6 +69,16 @@ function mergeStoredProfile(stored) {
     version: PLAYER_PROFILE_VERSION,
     identity: { ...defaults.identity, ...stored.identity },
     wallet: { ...defaults.wallet, ...stored.wallet },
+    collection: {
+      ...defaults.collection,
+      ...stored.collection,
+      ownedCardIds: Array.isArray(stored.collection?.ownedCardIds) ? [...new Set(stored.collection.ownedCardIds)] : defaults.collection.ownedCardIds,
+    },
+    presentation: {
+      ...defaults.presentation,
+      ...stored.presentation,
+      animations: { ...defaults.presentation.animations, ...stored.presentation?.animations },
+    },
     progression: {
       ...defaults.progression,
       ...stored.progression,
@@ -104,6 +128,17 @@ function loadPlayerProfile() {
       profile.progression.callus.level = 1
     }
 
+    // Preserve theme choices made before presentation settings joined the
+    // unified player profile.
+    if (!stored?.presentation) {
+      const legacyTheme = window.localStorage.getItem('honeyfoot-card-theme')
+      if (legacyTheme) profile.presentation.theme = legacyTheme
+    }
+
+    // Version 8 gives the unhurried presentation pace its intended role as
+    // the default. Earlier profiles only inherited Standard during prototyping.
+    if (stored?.version < 8) profile.presentation.animations.speed = 'relaxed'
+
     return profile
   } catch {
     return copyDefaults()
@@ -136,6 +171,20 @@ export function playerProfileReducer(profile, action) {
           },
         },
       }
+    case 'collection/buy-card': {
+      const cardId = String(action.cardId || '')
+      const price = Math.max(0, Number(action.price) || 0)
+      if (!cardId || profile.collection.ownedCardIds.includes(cardId) || profile.wallet.petals < price) return profile
+      return {
+        ...profile,
+        wallet: { ...profile.wallet, petals: profile.wallet.petals - price },
+        collection: { ...profile.collection, ownedCardIds: [...profile.collection.ownedCardIds, cardId] },
+      }
+    }
+    case 'presentation/set-theme':
+      return { ...profile, presentation: { ...profile.presentation, theme: action.theme } }
+    case 'presentation/set-animation':
+      return { ...profile, presentation: { ...profile.presentation, animations: { ...profile.presentation.animations, [action.field]: action.value } } }
     case 'progression/select-level': {
       if (!['archangels', 'callus'].includes(action.faction)) return profile
       const factionProgress = profile.progression[action.faction]

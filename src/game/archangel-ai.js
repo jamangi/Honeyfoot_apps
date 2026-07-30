@@ -1,7 +1,8 @@
-import { eligibleTargets, playCard } from './engine.js'
+import { cardSupplyCost, eligibleTargets, playCard } from './engine.js'
 
 const reductionFor = (card) => ['hydro-bandage', 'antifungal-cream'].includes(card.id)
   ? 4
+  : card.id === 'paraffin-treatment' ? 5
   : ['comfort-stretch', 'heel-balm', 'proper-trimming'].includes(card.id) ? 3 : 2
 
 const chooseCareTarget = (state, card, getCard) => [...eligibleTargets(state, card, getCard)].sort((a, b) => {
@@ -33,10 +34,11 @@ const affordableGenericCare = (state, cards, side, getCard) => {
   let supplies = state[`${side}Supplies`]
   return cards
     .filter((card) => card.type === 'Care Action' && !eligibleTargets(state, card, getCard).length)
-    .sort((a, b) => a.cost - b.cost)
+    .sort((a, b) => cardSupplyCost(state, a, side) - cardSupplyCost(state, b, side))
     .filter((card) => {
-      if (card.cost > supplies) return false
-      supplies -= card.cost
+      const cost = cardSupplyCost(state, card, side)
+      if (cost > supplies) return false
+      supplies -= cost
       return true
     })
 }
@@ -64,7 +66,7 @@ export function playArchangelTurn(state, getCard, difficulty = 'executive', side
 
   while (!next.result && cardsPlayed < maxCards && guard++ < 20) {
     const hand = next[`${side}Hand`].map(getCard).filter(Boolean)
-    const playable = hand.filter((card) => card.cost <= next[`${side}Supplies`])
+    const playable = hand.filter((card) => cardSupplyCost(next, card, side) <= next[`${side}Supplies`])
     const matchingCare = playable.find((card) => card.type === 'Care Action' && eligibleTargets(next, card, getCard).length)
     const doctor = playable.find((card) => card.id === 'dr-honeyfoot' && next.conditions.length)
     const socks = playable.find((card) => card.id === 'fresh-socks' && next.conditions.some((condition) => ['Surface', 'Microbial'].includes(getCard(condition.cardId)?.subtype)))
@@ -80,6 +82,7 @@ export function playArchangelTurn(state, getCard, difficulty = 'executive', side
     if (resolved === next) break
     next = resolved
     cardsPlayed += 1
+    options.onStep?.({ state: next, card, targetKey: target?.key })
   }
 
   return next
