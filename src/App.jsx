@@ -901,8 +901,8 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
     return [0,1,2].map((slotIndex) => {
       const id = board[slotIndex]
       const card = id ? cardById(id) : null
-      if (!card) return <button key={slotIndex} className={`influence-slot empty ${choosing ? 'available' : ''}`} onClick={() => choosing && chooseInfluenceSlot(slotIndex)} disabled={!choosing}><i>+</i><small>Slot {slotIndex + 1}</small></button>
-      return <div key={slotIndex} className={`influence-slot occupied ${choosing ? 'available' : ''}`}><BoardCard card={card} compact onClick={() => choosing ? chooseInfluenceSlot(slotIndex) : setViewedCard(card)} /><small>Slot {slotIndex + 1}</small></div>
+      if (!card) return <button key={slotIndex} className={`influence-slot empty ${choosing ? 'available' : ''}`} aria-label={choosing ? `Place Influence in slot ${slotIndex + 1}` : `Empty Influence slot ${slotIndex + 1}`} onClick={() => choosing && chooseInfluenceSlot(slotIndex)} disabled={!choosing}><i aria-hidden="true">+</i></button>
+      return <div key={slotIndex} className={`influence-slot occupied ${choosing ? 'available' : ''}`}><BoardCard card={card} compact onClick={() => choosing ? chooseInfluenceSlot(slotIndex) : setViewedCard(card)} /></div>
     })
   }
   return (
@@ -914,7 +914,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         <CardPile label="Deck" count={match.opponentDeck.length} faction={opponentDeck.faction} />
       </section>
       <main className={`board-field ${['archangel-round2-honeyfoot', 'archangel-round2-end', 'archangel-round3-finish', 'callus-round2-result', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-blister', 'callus-round4-end', 'callus-round5-wait', 'callus-round6-fissures', 'callus-round6-end', 'callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) ? 'has-tutorial-round-two' : ''}`}>
-        <div className="persistent-row opponent-persistents">{renderInfluenceSlots('opponent')}<span>{match.opponentBoard.some(Boolean) ? 'Opponent influences' : 'Opponent influence zone'}</span></div>
+        <div className="persistent-row opponent-persistents">{renderInfluenceSlots('opponent')}{match.opponentBoard.some(Boolean) && <span>Opponent influences</span>}</div>
         <div className={`condition-lane ${targetingId ? 'is-targeting' : ''}`}>{match.conditions.map((condition) => {
           const card = cardById(condition.cardId)
           const validTarget = targetingId && eligibleTargets(match, cardById(targetingId)).some((target) => target.key === condition.key)
@@ -930,7 +930,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
           <div className="comfort-orbit"><span>Comfort</span><strong>{match.comfort}</strong><small>/ {GAME_RULES.maxComfort}</small></div>
           <img src={assetUrl('/foot-explorer/sculpted/feminine-top-v1.png')} alt="The shared game foot" />
           <div className="comfort-meter"><i style={{ width: `${(match.comfort / GAME_RULES.maxComfort) * 100}%` }} /></div>
-          <p>{match.comfort <= 4 ? 'Comfort is strained.' : match.comfort >= 12 ? 'Comfort is flourishing.' : 'The balance is still in play.'}</p>
+          {(match.comfort <= 4 || match.comfort >= 12) && <p>{match.comfort <= 4 ? 'Comfort is strained.' : 'Comfort is flourishing.'}</p>}
         </div>
         {tutorialIntroOpen && tutorialGuide !== 'off' && <aside className={`tutorial-comfort-callout ${tutorialGuide === 'archangel-round1-care-kit' ? 'tutorial-supplies-callout' : ''}`} role="dialog" aria-label="Opening lesson">
           {tutorialGuide === 'archangel-round1-comfort' ? <>
@@ -953,7 +953,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         {tutorialGuide === 'callus-round5-wait' && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 5</small><h3>Sometimes restraint is best.</h3><p>If all 3 of your Condition slots are full, and all 3 of your Influence slots are full, there may not be anything meaningful you can play. In that case, feel free to simply End Turn.</p></aside>}
         {['callus-round6-fissures', 'callus-round6-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 6</small><h3>Prepare a stack.</h3><p>Our opponent is managing the Conditions well. Let’s try stacking duplicate Conditions to make a stronger one.</p><p className="tutorial-next-action">This turn, play <strong>Mild Heel Fissures</strong> and End Turn.</p></aside>}
         {['callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 7</small><h3>Layer the pressure.</h3><p>Now play another <strong>Mild Heel Fissures</strong>, which will cause it to stack onto the one in play, increasing Severity and Discomfort.</p><p className="tutorial-next-action">Then End Turn.</p></aside>}
-        <div className={`persistent-row player-persistents ${pendingInfluence?.side === 'player' ? 'is-placing' : ''}`}>{renderInfluenceSlots('player')}<span>{match.playerBoard.some(Boolean) ? 'Your influences' : 'Equipment & influence zone'}</span></div>
+        <div className={`persistent-row player-persistents ${pendingInfluence?.side === 'player' ? 'is-placing' : ''}`}>{renderInfluenceSlots('player')}{match.playerBoard.some(Boolean) && <span>Your influences</span>}</div>
         <aside className="board-status"><span>Supplies <strong>{match.playerSupplies}</strong></span><button className={tutorialEndTurnHighlighted ? 'tutorial-control-highlight' : ''} onClick={endTurn} disabled={match.result || pendingInfluence || pendingSearch}>End turn</button><button className="battle-log-toggle" onClick={() => setLogOpen(true)}>☷ History</button><small>{match.log.at(-1)?.text}</small></aside>
       </main>
       <section className="board-side player-side">
