@@ -1153,6 +1153,7 @@ function HoneyfootCards() {
   const [lessonSelecting, setLessonSelecting] = useState(false)
   const [lessonFaction, setLessonFaction] = useState(null)
   const [tutorialFaction, setTutorialFaction] = useState(() => localStorage.getItem('honeyfoot-tutorial-faction') || null)
+  const [firstLessonChoicePending, setFirstLessonChoicePending] = useState(() => !localStorage.getItem('honeyfoot-first-lesson-chosen'))
 
   useEffect(() => {
     localStorage.setItem('honeyfoot-card-theme', theme)
@@ -1189,6 +1190,11 @@ function HoneyfootCards() {
     setTestDifficulty('training')
     setBoardDeckId(lessonDeckId)
     setSection('Board')
+  }
+  const chooseLessonFaction = (faction) => {
+    setLessonFaction(faction)
+    setFirstLessonChoicePending(false)
+    localStorage.setItem('honeyfoot-first-lesson-chosen', faction)
   }
   const beginHomeMatch = () => {
     if (mode === 'learn') return setLessonSelecting(true)
@@ -1269,7 +1275,7 @@ function HoneyfootCards() {
                     { faction: 'archangels', label: 'Archangels', deck: 'Everyday Comfort', mark: '✦', copy: 'Ease Conditions and restore Comfort through thoughtful care.' },
                     { faction: 'callus', label: 'The Callus', deck: 'Pressure & Friction', mark: '⌁', copy: 'Build everyday pressure through Conditions and disruptive influences.' },
                   ].map((choice) => (
-                    <button key={choice.faction} type="button" className={`lesson-faction-card faction-${choice.faction} ${lessonFaction === choice.faction ? 'selected' : ''}`} aria-pressed={lessonFaction === choice.faction} onClick={() => setLessonFaction(choice.faction)}>
+                    <button key={choice.faction} type="button" className={`lesson-faction-card faction-${choice.faction} ${lessonFaction === choice.faction ? 'selected' : ''} ${firstLessonChoicePending && choice.faction === 'archangels' ? 'first-visit-guidance' : ''}`} aria-pressed={lessonFaction === choice.faction} onClick={() => chooseLessonFaction(choice.faction)}>
                       <span className="lesson-deck-back"><i>{choice.mark}</i></span>
                       <small>{choice.label}</small>
                       <strong>{choice.deck}</strong>
@@ -1286,7 +1292,7 @@ function HoneyfootCards() {
             <div className="faction-tabs" role="tablist" aria-label="Play mode">
               <button role="tab" aria-selected={mode === 'archangels'} onClick={() => { setMode('archangels'); setLessonSelecting(false) }}>Archangels</button>
               <button role="tab" aria-selected={mode === 'callus'} onClick={() => { setMode('callus'); setLessonSelecting(false) }}>The Callus</button>
-              <button role="tab" aria-selected={mode === 'learn'} onClick={() => setMode('learn')}>Learn</button>
+              <button role="tab" aria-selected={mode === 'learn'} className={firstLessonChoicePending ? 'first-visit-guidance' : ''} onClick={() => setMode('learn')}>Learn</button>
             </div>
 
             <div className="cards-play-center">
