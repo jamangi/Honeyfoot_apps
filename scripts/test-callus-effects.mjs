@@ -140,6 +140,12 @@ const base = () => createMatchState({ playerDeck: deck('Callus','callus','chroni
 }
 
 {
+  const starting = { ...base(), comfort: 8, opponentHand: ['basic-massage', 'basic-massage', 'care-kit'], opponentDiscard: [], opponentSupplies: 3, conditions: [] }
+  const guided = playArchangelTurn(starting, getCard, 'training', 'opponent', { maxCards: 1 })
+  assert.equal(guided.opponentHand.length, starting.opponentHand.length - 1, 'A guided Archangel opponent should play no more than one card per turn')
+}
+
+{
   const totalEfficientWins = Array.from({ length: 29 }, (_, index) => xpRequiredForNextLevel(index + 1) / 100).reduce((total, wins) => total + wins, 0)
   assert.equal(totalEfficientWins, 482, 'the level curve should require approximately four hours of efficient victories')
   assert.deepEqual(matchRewards({ won: true, difficulty: 'executive', opponentLevel: 10, playerLevel: 10 }), { xp: 100, gold: 100, difficultyModifier: 1, levelModifier: 1 }, 'a same-level Executive victory should grant full rewards')

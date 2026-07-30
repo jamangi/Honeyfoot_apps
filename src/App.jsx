@@ -728,7 +728,7 @@ function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
 
 function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null }) {
   const isTutorial = Boolean(tutorialFaction)
-  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v1` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
+  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v2` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
   const [match, setMatch] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(matchStorageKey))
@@ -844,7 +844,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
       if (current.result) return current
       let next = { ...current }
       if (opponentDeck.faction === 'archangels') {
-        next = playArchangelTurn(next, cardById, difficulty, 'opponent')
+        next = playArchangelTurn(next, cardById, difficulty, 'opponent', { maxCards: isTutorial ? 1 : Infinity })
       } else {
         const preferred = selectCallusCard(next, cardById, difficulty)
         if (preferred) next = applyCard(next, preferred, 'opponent')

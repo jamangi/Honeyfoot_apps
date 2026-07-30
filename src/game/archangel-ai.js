@@ -56,11 +56,13 @@ const chooseGenericCare = (state, playable, side, difficulty, getCard) => {
   return null
 }
 
-export function playArchangelTurn(state, getCard, difficulty = 'executive', side = 'opponent') {
+export function playArchangelTurn(state, getCard, difficulty = 'executive', side = 'opponent', options = {}) {
   let next = state
   let guard = 0
+  let cardsPlayed = 0
+  const maxCards = Number.isFinite(options.maxCards) ? Math.max(0, options.maxCards) : Infinity
 
-  while (!next.result && guard++ < 20) {
+  while (!next.result && cardsPlayed < maxCards && guard++ < 20) {
     const hand = next[`${side}Hand`].map(getCard).filter(Boolean)
     const playable = hand.filter((card) => card.cost <= next[`${side}Supplies`])
     const matchingCare = playable.find((card) => card.type === 'Care Action' && eligibleTargets(next, card, getCard).length)
@@ -77,6 +79,7 @@ export function playArchangelTurn(state, getCard, difficulty = 'executive', side
     const resolved = playCard(next, { card, side, getCard, targetKey: target?.key })
     if (resolved === next) break
     next = resolved
+    cardsPlayed += 1
   }
 
   return next
