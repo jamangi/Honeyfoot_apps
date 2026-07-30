@@ -728,7 +728,7 @@ function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
 
 function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null }) {
   const isTutorial = Boolean(tutorialFaction)
-  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v2` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
+  const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v3` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
   const [match, setMatch] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(matchStorageKey))
@@ -758,12 +758,14 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         : tutorialGuide === 'callus-round2-severity' ? ['narrow-box', 'morning-dagger']
           : tutorialGuide === 'callus-round2-dagger' ? ['morning-dagger']
             : tutorialGuide === 'callus-round3-toe' ? ['toe-cramp']
-              : tutorialGuide === 'callus-round4-floors' ? ['hard-floors']
+              : tutorialGuide === 'callus-round4-floors' ? ['hard-floors', 'friction-blister']
+                : tutorialGuide === 'callus-round4-blister' ? ['friction-blister']
+                  : tutorialGuide === 'callus-round6-fissures' || tutorialGuide === 'callus-round7-fissures' ? ['mild-fissures']
         : tutorialGuide === 'archangel-round2-balm' ? ['heel-balm']
           : tutorialGuide === 'archangel-round2-honeyfoot' ? ['dr-honeyfoot']
             : tutorialGuide === 'archangel-round3-cream' ? ['antifungal-cream']
               : tutorialGuide === 'archangel-round3-finish' ? testCardLibrary.filter((card) => card.faction === 'archangels' && card.type === 'Care Action').map((card) => card.id) : []
-  const tutorialEndTurnHighlighted = ['archangel-round1-care-kit', 'archangel-round1-end', 'callus-round1-dampness', 'callus-round1-itch', 'callus-round1-end', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-end', 'archangel-round2-honeyfoot', 'archangel-round2-end'].includes(tutorialGuide)
+  const tutorialEndTurnHighlighted = ['archangel-round1-care-kit', 'archangel-round1-end', 'callus-round1-dampness', 'callus-round1-itch', 'callus-round1-end', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-blister', 'callus-round4-end', 'callus-round5-wait', 'callus-round6-fissures', 'callus-round6-end', 'callus-round7-fissures', 'callus-round7-end', 'archangel-round2-honeyfoot', 'archangel-round2-end'].includes(tutorialGuide)
 
   useEffect(() => {
     localStorage.setItem(matchStorageKey, JSON.stringify({ playerDeckId: playerDeck.id, opponentDeckId: opponentDeck.id, match }))
@@ -813,12 +815,17 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         'callus-round2-severity': ['narrow-box', 'callus-round2-dagger'],
         'callus-round2-dagger': ['morning-dagger', 'callus-round2-end'],
         'callus-round3-toe': ['toe-cramp', 'callus-round3-end'],
-        'callus-round4-floors': ['hard-floors', 'callus-round4-end'],
+        'callus-round4-floors': ['hard-floors', 'callus-round4-blister'],
+        'callus-round4-blister': ['friction-blister', 'callus-round4-end'],
+        'callus-round6-fissures': ['mild-fissures', 'callus-round6-end'],
+        'callus-round7-fissures': ['mild-fissures', 'callus-round7-end'],
         'archangel-round2-balm': ['heel-balm', 'archangel-round2-honeyfoot'],
         'archangel-round2-honeyfoot': ['dr-honeyfoot', 'archangel-round2-end'],
         'archangel-round3-cream': ['antifungal-cream', 'archangel-round3-finish'],
       }[tutorialGuide]
-      if (!expectedNext || selectedCard.id !== expectedNext[0]) {
+      if (tutorialGuide === 'callus-round5-wait' && selectedCard.id === 'haider') {
+        // Haider is an optional lesson-five play; keep the End Turn guidance active.
+      } else if (!expectedNext || selectedCard.id !== expectedNext[0]) {
         setTutorialGuide('off')
         setTutorialIntroOpen(false)
       } else setTutorialGuide(expectedNext[1])
@@ -838,7 +845,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
   const endTurn = () => {
     if (isTutorial) {
       setTutorialIntroOpen(false)
-      setTutorialGuide((current) => current === 'archangel-round1-end' ? 'archangel-round2-balm' : current === 'archangel-round2-end' ? 'archangel-round3-cream' : current === 'callus-round1-end' ? 'callus-round2-result' : current === 'callus-round2-end' ? 'callus-round3-toe' : current === 'callus-round3-end' ? 'callus-round4-floors' : 'off')
+      setTutorialGuide((current) => current === 'archangel-round1-end' ? 'archangel-round2-balm' : current === 'archangel-round2-end' ? 'archangel-round3-cream' : current === 'callus-round1-end' ? 'callus-round2-result' : current === 'callus-round2-end' ? 'callus-round3-toe' : current === 'callus-round3-end' ? 'callus-round4-floors' : current === 'callus-round4-end' ? 'callus-round5-wait' : current === 'callus-round5-wait' ? 'callus-round6-fissures' : current === 'callus-round6-end' ? 'callus-round7-fissures' : current === 'callus-round7-end' ? 'off' : 'off')
     }
     setMatch((current) => {
       if (current.result) return current
@@ -906,7 +913,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         <div className="board-hand opponent-hand">{match.opponentHand.map((id, index) => <BoardCard key={`${id}-${index}`} hidden />)}</div>
         <CardPile label="Deck" count={match.opponentDeck.length} faction={opponentDeck.faction} />
       </section>
-      <main className={`board-field ${['archangel-round2-honeyfoot', 'archangel-round2-end', 'archangel-round3-finish', 'callus-round2-result', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-end'].includes(tutorialGuide) ? 'has-tutorial-round-two' : ''}`}>
+      <main className={`board-field ${['archangel-round2-honeyfoot', 'archangel-round2-end', 'archangel-round3-finish', 'callus-round2-result', 'callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end', 'callus-round3-toe', 'callus-round3-end', 'callus-round4-floors', 'callus-round4-blister', 'callus-round4-end', 'callus-round5-wait', 'callus-round6-fissures', 'callus-round6-end', 'callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) ? 'has-tutorial-round-two' : ''}`}>
         <div className="persistent-row opponent-persistents">{renderInfluenceSlots('opponent')}<span>{match.opponentBoard.some(Boolean) ? 'Opponent influences' : 'Opponent influence zone'}</span></div>
         <div className={`condition-lane ${targetingId ? 'is-targeting' : ''}`}>{match.conditions.map((condition) => {
           const card = cardById(condition.cardId)
@@ -939,10 +946,13 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
         </aside>}
         {['archangel-round2-honeyfoot', 'archangel-round2-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Care and Comfort</small><h3>The Severity eased.</h3><p>Heavy Heel Balm reduced the Severity by 3, which increases Comfort by 3. Now you can finish it off by playing <strong>Dr. Honeyfoot</strong>, and then End Turn.</p><p className="tutorial-next-action"><strong>Note:</strong> Supporter cards may reduce the Severity of Conditions but will not increase Comfort.</p></aside>}
         {tutorialGuide === 'archangel-round3-finish' && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Victory is within range</small><h3>{match.comfort} / {match.maxComfort} Comfort</h3><p>Notice that Comfort is at 13/16. Victory is within range. If you play a Care Action card with no target, it grants 1 Comfort.</p><p className="tutorial-next-action">Play any 3 of your remaining Care Action cards to win the game. <strong>{tutorialCareActionsRemaining} remaining.</strong></p></aside>}
-        {tutorialGuide === 'callus-round2-result' && <aside className="tutorial-comfort-callout tutorial-round-two" role="dialog" aria-label="Discomfort lesson"><small>Round 2</small><h3>Follow the Comfort.</h3><p>Webbing Itch deals 1 Discomfort, but activates twice, so the score should have moved from 8 → 6. However, the opponent played a card to increase Comfort back up to 7. You can check the History to see what card they played.</p><button type="button" onClick={() => setTutorialGuide('callus-round2-severity')}>Got it</button></aside>}
+        {tutorialGuide === 'callus-round2-result' && <aside className="tutorial-comfort-callout tutorial-round-two" role="dialog" aria-label="Discomfort lesson"><small>Round 2</small><h3>Follow the Comfort.</h3><p>You can play one Condition per turn. Each Condition does 1 Discomfort at the end of your turn.</p><p>Webbing Itch deals 1 Discomfort, but activates twice, so the score should have moved from 8 → 6. However, the opponent played a card to increase Comfort back up. You can check the History to see what card they played.</p><button type="button" onClick={() => setTutorialGuide('callus-round2-severity')}>Got it</button></aside>}
         {['callus-round2-severity', 'callus-round2-dagger', 'callus-round2-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Condition cards</small><h3>Severity</h3><p>Severity is how much care a Condition can resist before being discarded. A Condition’s Severity is located on the top right of each Condition card. The greater the Severity, the more difficult it will be for the Archangels to manage the Condition.</p><p className="tutorial-next-action">Play <strong>Aggressive Taper</strong> first, then play <strong>The Morning Dagger</strong>, and then End Turn.</p></aside>}
         {['callus-round3-toe', 'callus-round3-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Condition limit</small><h3>Build the pressure.</h3><p>You can only have up to 3 unique Conditions in play at a time, but you can stack duplicates to increase their Severity and Discomfort. In this case, a Toe Cramp should add sufficient pressure.</p><p className="tutorial-next-action">Play <strong>Toe Cramp</strong> and then End Turn.</p></aside>}
-        {['callus-round4-floors', 'callus-round4-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Influence cards</small><h3>Pressure can persist.</h3><p>The opponent removed 4 Severity from our Webbing Itch, but it is no matter, because we have <strong>Commercial Hard Floors</strong>.</p><p className="tutorial-next-action">Read what it does, and then play Commercial Hard Floors and then End Turn.</p></aside>}
+        {['callus-round4-floors', 'callus-round4-blister', 'callus-round4-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Influence cards</small><h3>Pressure can persist.</h3><p>The opponent removed Severity from more of our Conditions, but it is no matter, because we have <strong>Commercial Hard Floors</strong>.</p><p className="tutorial-next-action">Read what it does, play Commercial Hard Floors, and then play Friction Blister, then End Turn.</p></aside>}
+        {tutorialGuide === 'callus-round5-wait' && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 5</small><h3>Sometimes restraint is best.</h3><p>If all 3 of your Condition slots are full, and all 3 of your Influence slots are full, there may not be anything meaningful you can play. In that case, feel free to simply End Turn.</p></aside>}
+        {['callus-round6-fissures', 'callus-round6-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 6</small><h3>Prepare a stack.</h3><p>Our opponent is managing the Conditions well. Let’s try stacking duplicate Conditions to make a stronger one.</p><p className="tutorial-next-action">This turn, play <strong>Mild Heel Fissures</strong> and End Turn.</p></aside>}
+        {['callus-round7-fissures', 'callus-round7-end'].includes(tutorialGuide) && <aside className="tutorial-comfort-callout tutorial-round-two" role="status"><small>Round 7</small><h3>Layer the pressure.</h3><p>Now play another <strong>Mild Heel Fissures</strong>, which will cause it to stack onto the one in play, increasing Severity and Discomfort.</p><p className="tutorial-next-action">Then End Turn.</p></aside>}
         <div className={`persistent-row player-persistents ${pendingInfluence?.side === 'player' ? 'is-placing' : ''}`}>{renderInfluenceSlots('player')}<span>{match.playerBoard.some(Boolean) ? 'Your influences' : 'Equipment & influence zone'}</span></div>
         <aside className="board-status"><span>Supplies <strong>{match.playerSupplies}</strong></span><button className={tutorialEndTurnHighlighted ? 'tutorial-control-highlight' : ''} onClick={endTurn} disabled={match.result || pendingInfluence || pendingSearch}>End turn</button><button className="battle-log-toggle" onClick={() => setLogOpen(true)}>☷ History</button><small>{match.log.at(-1)?.text}</small></aside>
       </main>
