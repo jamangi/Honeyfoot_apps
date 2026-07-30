@@ -533,6 +533,42 @@ button:focus-visible, a:focus-visible { outline: 2px solid #777; outline-offset:
   .board-card strong { font-size: 8.5px; }
   .condition-lane-label { top: -18px; font-size: 5.5px; }
 }
+
+/* Turn Displayer routes. The engine resolves immediately; these animations
+   narrate the resulting transcript without delaying or mutating game rules. */
+.event-card-play .game-card { transform-origin: center; animation: turn-card-route var(--turn-event-duration,1450ms) cubic-bezier(.2,.72,.2,1) both; }
+.event-card-play.movement-condition-zone { --route-end-x: clamp(-430px,-37vw,-180px); --route-end-y: 0px; --route-end-scale: .66; }
+.event-card-play.movement-influence-zone { --route-end-x: clamp(120px,19vw,280px); --route-end-y: clamp(-250px,-24vh,-120px); --route-end-scale: .68; }
+.event-card-play.movement-discard { --route-end-x: clamp(-470px,-42vw,-220px); --route-end-y: clamp(-360px,-34vh,-170px); --route-end-scale: .56; }
+.turn-draw-pair { position: relative; width: 100px; height: 128px; }
+.turn-draw-pair .turn-display-card-back { position: absolute; top: 4px; left: 5px; width: 70px; height: 92px; }
+.turn-draw-pair .draw-opponent { animation: turn-draw-opponent var(--turn-event-duration,700ms) cubic-bezier(.22,.7,.25,1) both; }
+.turn-draw-pair .draw-player { animation: turn-draw-player var(--turn-event-duration,700ms) cubic-bezier(.22,.7,.25,1) both; }
+
+@keyframes turn-card-route {
+  0% { opacity: .35; transform: translate(clamp(150px,30vw,420px),clamp(-360px,-35vh,-170px)) scale(.48) rotate(3deg); }
+  18% { opacity: 1; transform: translate(0,0) scale(1.04) rotate(0); }
+  30%,72% { opacity: 1; transform: translate(0,0) scale(1) rotate(0); }
+  100% { opacity: .82; transform: translate(var(--route-end-x,0),var(--route-end-y,0)) scale(var(--route-end-scale,.65)) rotate(-1deg); }
+}
+@keyframes turn-draw-opponent {
+  0% { opacity: .25; transform: translate(clamp(220px,40vw,510px),clamp(-350px,-36vh,-165px)) scale(.6) rotate(5deg); }
+  35% { opacity: 1; }
+  100% { opacity: .95; transform: translate(clamp(80px,15vw,210px),clamp(-350px,-36vh,-165px)) scale(.72) rotate(-2deg); }
+}
+@keyframes turn-draw-player {
+  0% { opacity: .25; transform: translate(clamp(220px,40vw,510px),clamp(170px,35vh,350px)) scale(.6) rotate(5deg); }
+  35% { opacity: 1; }
+  100% { opacity: .95; transform: translate(clamp(80px,15vw,210px),clamp(170px,35vh,350px)) scale(.72) rotate(-2deg); }
+}
+
+@media (max-width: 700px) {
+  .event-card-play { --route-end-scale: .58; }
+  .event-card-play.movement-condition-zone { --route-end-x: -38vw; --route-end-y: 0px; }
+  .event-card-play.movement-influence-zone { --route-end-x: 12vw; --route-end-y: -21vh; }
+  .event-card-play.movement-discard { --route-end-x: -39vw; --route-end-y: -30vh; }
+  .turn-draw-pair .turn-display-card-back { width: 54px; height: 72px; }
+}
 .deck-card-detail-close { position: absolute; z-index: 2; top: 13px; right: 13px; width: 36px; height: 36px; border: 1px solid #d8d0c4; border-radius: 50%; background: #fffdf8; color: #44544b; font-size: 24px; cursor: pointer; }
 .deck-card-detail > div:last-child { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; }
 .deck-card-detail > div:last-child > small { color: #a17061; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

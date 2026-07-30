@@ -738,7 +738,7 @@ function createMatch(playerDeck, opponentDeck, tutorialFaction = null) {
   }
 }
 
-function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null, animationSettings }) {
+function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 1, onMatchComplete, onExit, tutorialFaction = null, animationSettings, launchOrigin = 'Decks' }) {
   const isTutorial = Boolean(tutorialFaction)
   const matchStorageKey = `${isTutorial ? `honeyfoot-tutorial-${tutorialFaction}-v3` : 'honeyfoot-match-economy-v1'}-${playerDeck.id}-${opponentDeck.id}-${difficulty}-${opponentLevel}`
   const [match, setMatch] = useState(() => {
@@ -769,6 +769,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
   const activeTurnEvent = turnPlayback?.events[turnPlayback.index] || null
   const systemReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const reducedMotion = animationSettings.reducedMotion === 'on' || (animationSettings.reducedMotion === 'system' && systemReducedMotion)
+  const activeTurnDuration = activeTurnEvent ? turnEventDelay(activeTurnEvent, animationSettings, reducedMotion) : 0
   const tutorialPromptCardIds = tutorialGuide === 'archangel-round1-care-kit' ? ['care-kit']
         : tutorialGuide === 'callus-round1-dampness' ? ['chronic-dampness', 'webbing-itch']
       : tutorialGuide === 'callus-round1-itch' ? ['webbing-itch']
@@ -946,7 +947,7 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
   }
   return (
     <div className={`honeyfoot-board ${turnPlayback ? 'is-displaying-turn' : ''} ${reducedMotion ? 'reduced-motion' : ''}`}>
-      <div className="board-topline"><button onClick={onExit}>← {isTutorial ? 'Lesson' : 'Decks'}</button><span>{isTutorial ? 'Guided lesson' : `Test match · ${TEST_DIFFICULTIES[difficulty].label}`} · Round {match.round}</span><strong>{opponentDeck.name}</strong></div>
+      <div className="board-topline"><button onClick={onExit}>← {isTutorial ? 'Lesson' : launchOrigin}</button><span>{isTutorial ? 'Guided lesson' : `Test match · ${TEST_DIFFICULTIES[difficulty].label}`} · Round {match.round}</span><strong>{opponentDeck.name}</strong></div>
       {concedeConfirm && <div className="board-decision-backdrop concede-backdrop"><section className="concede-dialog" role="alertdialog" aria-labelledby="concede-title"><small>End this match</small><h3 id="concede-title">Concede?</h3><p>This will immediately award the match to {opponentDeck.faction === 'archangels' ? 'the Archangels' : 'The Callus'}.</p><div><button onClick={() => setConcedeConfirm(false)}>Keep playing</button><button className="primary" onClick={concedeMatch}>Concede match</button></div></section></div>}
       <section className="board-side opponent-side">
         <CardPile label="Discard" count={match.opponentDiscard.length} faction={opponentDeck.faction} discard />
@@ -1021,14 +1022,14 @@ function HoneyfootBoard({ playerDeck, opponentDeck, difficulty, opponentLevel = 
       {pendingSearch && inspectSearchBoard && <button className="return-to-decision return-to-search" onClick={() => setInspectSearchBoard(false)}><span>{cardById(pendingSearch.sourceCardId).mark}</span> Return to deck search</button>}
       {pendingInfluence && <div className="influence-placement-banner"><div><small>Choose an Influence slot</small><strong>{cardById(pendingInfluence.cardId).name}</strong></div><span>Choose an empty space or select an Influence to replace.</span><button onClick={cancelInfluence}>Cancel</button></div>}
       {pendingInfluenceRemoval && <div className="influence-placement-banner influence-removal-banner"><div><small>Choose an opposing Influence</small><strong>{cardById(pendingInfluenceRemoval.sourceCardId).name}</strong></div><span>Select a glowing Shoe Attribute or Hazard to discard.</span><button onClick={cancelRemoval}>Cancel</button></div>}
-      {activeTurnEvent && !animationSettings.skip && <div className={`turn-display-layer event-${activeTurnEvent.type}`} aria-live="polite">
-        {activeTurnEvent.cardId ? <GameCard card={cardById(activeTurnEvent.cardId)} onInspect={() => {}} showTraits={false} /> : activeTurnEvent.type === 'draw' ? <div className={`turn-display-card-back faction-${opponentDeck.faction}`}><span>{opponentDeck.faction === 'archangels' ? '✦' : '⌁'}</span></div> : <span className="turn-display-symbol">{activeTurnEvent.type === 'care-check' ? '◎' : activeTurnEvent.type === 'turn-end' ? '→' : '•'}</span>}
+      {activeTurnEvent && !animationSettings.skip && <div className={`turn-display-layer event-${activeTurnEvent.type} ${activeTurnEvent.movement?.to ? `movement-${activeTurnEvent.movement.to}` : ''}`} style={{ '--turn-event-duration': `${activeTurnDuration}ms` }} aria-live="polite">
+        {activeTurnEvent.cardId ? <GameCard card={cardById(activeTurnEvent.cardId)} onInspect={() => {}} showTraits={false} /> : activeTurnEvent.type === 'draw' ? <div className="turn-draw-pair" aria-hidden="true"><div className={`turn-display-card-back draw-opponent faction-${opponentDeck.faction}`}><span>{opponentDeck.faction === 'archangels' ? '✦' : '⌁'}</span></div><div className={`turn-display-card-back draw-player faction-${playerDeck.faction}`}><span>{playerDeck.faction === 'archangels' ? '✦' : '⌁'}</span></div></div> : <span className="turn-display-symbol">{activeTurnEvent.type === 'care-check' ? '◎' : activeTurnEvent.type === 'turn-end' ? '→' : '•'}</span>}
         <div><small>{activeTurnEvent.type.replace('-', ' ')}</small><h3>{activeTurnEvent.title}</h3><p>{activeTurnEvent.detail}</p></div>
       </div>}
       {replacementSlot !== null && pendingInfluence && <div className="influence-replace-backdrop"><section className="influence-replace-dialog"><small>Influence slot {replacementSlot + 1}</small><h3>Replace this Influence?</h3><p><strong>{cardById(pendingInfluence.cardId).name}</strong> will enter this slot. <strong>{cardById(match.playerBoard[replacementSlot]).name}</strong> will be discarded.</p><label><input type="checkbox" checked={skipReplacementConfirm} onChange={(event) => setSkipReplacementConfirm(event.target.checked)} /> Don’t ask again this match</label><div><button onClick={() => setReplacementSlot(null)}>Keep current</button><button className="primary" onClick={confirmReplacement}>Replace influence</button></div></section></div>}
       {viewedCard && <div className={`board-decision-backdrop ${pendingSearch ? 'search-card-inspector' : ''}`} onClick={() => setViewedCard(null)}><div className="board-card-view" onClick={(event) => event.stopPropagation()}><button className="card-view-close" onClick={() => setViewedCard(null)} aria-label="Close card details">×</button><GameCard card={viewedCard} onInspect={() => {}} showTraits={false} /><div><small>{viewedCard.type}{viewedCard.subtype ? ` · ${viewedCard.subtype}` : ''}</small><h3>{viewedCard.name}</h3><p>{viewedCard.text}</p>{viewedCard.severity && <strong>Current Severity: {viewedCard.severity}</strong>}{viewedCard.copies > 1 && <strong>Copies in stack: {viewedCard.copies} · Discomfort: {viewedCard.currentDiscomfort}</strong>}{viewedCard.traits?.length > 0 && <span>Traits: {viewedCard.traits.join(', ')}</span>}</div></div></div>}
       {logOpen && <aside className="battle-log-panel"><header><div><small>Match record</small><h3>History</h3></div><button onClick={() => setLogOpen(false)} aria-label="Close history">×</button></header><div className="battle-log-scroll">{[...new Set(match.log.map((entry) => entry.round))].reverse().map((round) => <section key={round}><h4>Round {round}</h4>{match.log.filter((entry) => entry.round === round).map((entry, index) => { const card = entry.cardId ? cardById(entry.cardId) : null; const visibleDetails = (entry.details || []).filter((detail) => detail.visibility === 'public' || detail.visibility === 'player'); const entryKey = `${round}-${index}-${entry.phase}`; const expanded = expandedLogEntries[entryKey]; return <div className={`battle-event-wrap actor-${entry.actor}`} key={entryKey}><button className={`battle-event ${visibleDetails.length ? 'has-details' : ''}`} onClick={() => visibleDetails.length && setExpandedLogEntries((current) => ({ ...current, [entryKey]: !current[entryKey] }))}>{card ? <span className={`event-card specialty-${card.specialty.toLowerCase()}`}>{card.mark}</span> : <span className="event-dot">•</span>}<div><small>{entry.phase}</small><p>{entry.text}</p></div>{visibleDetails.length > 0 && <b aria-label={expanded ? 'Hide card details' : 'Show card details'}>{expanded ? '⌃' : '⌄'}</b>}</button>{expanded && <div className="battle-event-details">{visibleDetails.map((detail, detailIndex) => { const detailCard = detail.cardId ? cardById(detail.cardId) : null; return <button key={`${detail.cardId}-${detailIndex}`} onClick={() => detailCard && setViewedCard(detailCard)}>{detailCard ? <span className={`event-card specialty-${detailCard.specialty.toLowerCase()}`}>{detailCard.mark}</span> : <span className="event-dot">•</span>}<span><small>{detail.visibility === 'public' ? 'Revealed' : 'Private to you'}</small><strong>{detail.text}</strong></span></button> })}</div>}</div> })}</section>)}</div></aside>}
-      {match.result && <div className="board-result"><div><small>{isTutorial ? 'Lesson match complete' : 'Test match complete'}</small><h2>{winnerName} prevail</h2><p>{match.result === playerDeck.faction ? 'Your deck carried the foot to its goal.' : 'The opposing deck reached its goal first.'}</p>{matchReward && <div className="match-rewards"><span><strong>+{matchReward.gold}</strong> Petals</span><span><strong>+{matchReward.xp}</strong> XP</span>{matchReward.levelsGained > 0 && <b>Level {matchReward.newLevel} reached</b>}</div>}<button onClick={() => setLogOpen(true)}>Review history</button><button onClick={() => { setMatchReward(null); setMatch(createMatch(playerDeck, opponentDeck, tutorialFaction)); setTutorialIntroOpen(isTutorial); setTutorialGuide(tutorialFaction === 'archangels' ? 'archangel-round1-comfort' : tutorialFaction === 'callus' ? 'callus-round1-dampness' : 'off'); setTutorialCareActionsRemaining(3); setTargetingId(null); setSkipReplacementConfirm(false); setReplacementSlot(null) }}>Rematch</button><button onClick={onExit}>Return to {isTutorial ? 'lesson selection' : 'decks'}</button></div></div>}
+      {match.result && <div className="board-result"><div><small>{isTutorial ? 'Lesson match complete' : 'Test match complete'}</small><h2>{winnerName} prevail</h2><p>{match.result === playerDeck.faction ? 'Your deck carried the foot to its goal.' : 'The opposing deck reached its goal first.'}</p>{matchReward && <div className="match-rewards"><span><strong>+{matchReward.gold}</strong> Petals</span><span><strong>+{matchReward.xp}</strong> XP</span>{matchReward.levelsGained > 0 && <b>Level {matchReward.newLevel} reached</b>}</div>}<button onClick={() => setLogOpen(true)}>Review history</button><button onClick={() => { setMatchReward(null); setMatch(createMatch(playerDeck, opponentDeck, tutorialFaction)); setTutorialIntroOpen(isTutorial); setTutorialGuide(tutorialFaction === 'archangels' ? 'archangel-round1-comfort' : tutorialFaction === 'callus' ? 'callus-round1-dampness' : 'off'); setTutorialCareActionsRemaining(3); setTargetingId(null); setSkipReplacementConfirm(false); setReplacementSlot(null) }}>Rematch</button><button onClick={onExit}>{isTutorial ? 'Return to lesson selection' : launchOrigin === 'Home' ? 'Return Home' : 'Return to decks'}</button></div></div>}
     </div>
   )
 }
@@ -1198,6 +1199,7 @@ function HoneyfootCards() {
   })
   const [testNotice, setTestNotice] = useState('')
   const [boardDeckId, setBoardDeckId] = useState(() => localStorage.getItem('honeyfoot-board-deck-id') || null)
+  const [boardLaunchOrigin, setBoardLaunchOrigin] = useState(() => localStorage.getItem('honeyfoot-board-launch-origin') || 'Decks')
   const [testDifficulty, setTestDifficulty] = useState(() => localStorage.getItem('honeyfoot-test-difficulty') || 'training')
   const [lessonSelecting, setLessonSelecting] = useState(false)
   const [lessonFaction, setLessonFaction] = useState(null)
@@ -1210,6 +1212,7 @@ function HoneyfootCards() {
   useEffect(() => { localStorage.setItem('honeyfoot-card-section', section) }, [section])
   useEffect(() => { localStorage.setItem('honeyfoot-card-mode', mode) }, [mode])
   useEffect(() => { boardDeckId ? localStorage.setItem('honeyfoot-board-deck-id', boardDeckId) : localStorage.removeItem('honeyfoot-board-deck-id') }, [boardDeckId])
+  useEffect(() => { localStorage.setItem('honeyfoot-board-launch-origin', boardLaunchOrigin) }, [boardLaunchOrigin])
   useEffect(() => { tutorialFaction ? localStorage.setItem('honeyfoot-tutorial-faction', tutorialFaction) : localStorage.removeItem('honeyfoot-tutorial-faction') }, [tutorialFaction])
 
   const activeFaction = mode === 'callus' ? 'callus' : 'archangels'
@@ -1224,6 +1227,7 @@ function HoneyfootCards() {
     setTutorialFaction(null)
     setMode(deck.faction)
     setBoardDeckId(deck.id)
+    setBoardLaunchOrigin('Decks')
     setSection('Board')
     setTestNotice('')
   }
@@ -1236,6 +1240,7 @@ function HoneyfootCards() {
     setMode(lessonFaction)
     setTestDifficulty('training')
     setBoardDeckId(lessonDeckId)
+    setBoardLaunchOrigin('Lesson')
     setSection('Board')
   }
   const chooseLessonFaction = (faction) => {
@@ -1251,6 +1256,7 @@ function HoneyfootCards() {
     }
     setTutorialFaction(null)
     setBoardDeckId(activeDeck.id)
+    setBoardLaunchOrigin('Home')
     setSection('Board')
     setTestNotice('')
   }
@@ -1296,9 +1302,9 @@ function HoneyfootCards() {
       </header>
 
       {section === 'Board' && boardDeck && opponentDeck ? (
-        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} opponentLevel={boardProgress?.selectedLevel || 1} onMatchComplete={grantMatchRewards} tutorialFaction={tutorialFaction} animationSettings={animationSettings} onExit={() => {
+        <HoneyfootBoard playerDeck={boardDeck} opponentDeck={opponentDeck} difficulty={testDifficulty} opponentLevel={boardProgress?.selectedLevel || 1} onMatchComplete={grantMatchRewards} tutorialFaction={tutorialFaction} animationSettings={animationSettings} launchOrigin={boardLaunchOrigin} onExit={() => {
           if (tutorialFaction) { setMode('learn'); setLessonFaction(tutorialFaction); setLessonSelecting(true); setTutorialFaction(null); setSection('Home') }
-          else setSection('Decks')
+          else setSection(boardLaunchOrigin === 'Home' ? 'Home' : 'Decks')
         }} />
       ) : section === 'Home' ? (
         <div className="cards-home-layout">
