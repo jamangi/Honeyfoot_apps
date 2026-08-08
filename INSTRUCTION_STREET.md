@@ -15,6 +15,30 @@ This street translates the Honeyfoot engine SAIP into small, paired units of
 work. It does not replace the SAIP. If this file and the SAIP disagree, stop
 and follow the SAIP's authority and escalation rules.
 
+## Starting package and clean-room meaning
+
+This street is designed to let a builder construct the new engine from scratch
+inside `src/honeyfoot-engine/`; it is not designed to repair or gradually
+refactor the legacy engine.
+
+Before Street 01, the builder must have:
+
+1. A clean checkout of `jamangi/Honeyfoot_apps` with its existing package file.
+2. `Honeyfoot_Engine_SAIP.md`, which supplies architecture, invariants, phase
+   gates, golden scenarios, and escalation rules.
+3. `CORE_MECHANICS.md`, which supplies canonical turn, zone, timing, targeting,
+   and outcome rules.
+4. `CARDS.md`, which supplies the canonical card catalog and card-specific
+   resolution requirements.
+5. A supported Node.js/npm runtime capable of running the repository scripts.
+
+`CARDS.md` is therefore necessary but not sufficient by itself. The SAIP and
+`CORE_MECHANICS.md` are equally required authorities. The existing
+`src/game/` implementation is deliberately *not* a starting resource: the
+builder may inspect it only at Street 61, after the clean-room engine and its
+tests already exist. That late comparison can reveal missing conformance cases,
+but legacy behavior cannot silently redefine the new engine.
+
 The street has two lanes:
 
 - **Lane A — Instruction:** perform one bounded change.
